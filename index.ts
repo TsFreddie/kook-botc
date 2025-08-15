@@ -1,7 +1,8 @@
-import { ApiMessageType, Permission } from './lib/api.ts';
+import { ApiChannelType, ApiMessageType, Permission } from './lib/api.ts';
 import { KookClient, type KookClientConfig } from './lib/kook.ts';
 import { config as dotenv } from 'dotenv';
 import { introCard } from './templates/intro.ts';
+import { createdCard } from './templates/created.ts';
 
 dotenv({ quiet: true });
 
@@ -82,8 +83,14 @@ const log = async (msg: string) => {
   }
 };
 
+interface GameConfig {
+  inGameRoleId: number;
+  roomCategoryId: string;
+  gameCategoryId: string;
+}
+
 // 配置机器人监听
-const setupListeners = () => {
+const setupListeners = (config: GameConfig) => {
   if (process.env.ADMIN_ID) {
     // 仅在有管理员ID的情况下监听
     bot.onTextMessage(async (event) => {
@@ -104,8 +111,65 @@ const setupListeners = () => {
     });
   }
 
+  /** 创建房间 */
+  const createRoom = async (target_id: string, user: string) => {
+    // 生成随机5位数字，用0填充
+    const randomNumber = Math.floor(Math.random() * 100000)
+      .toString()
+      .padStart(5, '0');
+    const roomName = `组团 ${randomNumber}`;
+
+    // 创建主页面文本频道
+    const text = await bot.api.channelCreate({
+      guild_id,
+      name: roomName,
+      type: ApiChannelType.TEXT,
+      parent_id: config.gameCategoryId,
+    });
+
+    // 创建大厅语音频道
+    const voice = await bot.api.channelCreate({
+      guild_id,
+      name: roomName,
+      type: ApiChannelType.VOICE,
+      limit_amount: 20,
+      parent_id: config.roomCategoryId,
+    });
+
+    // 更新频道权限，拒绝所有人加入语音
+    await bot.api.channelRoleUpdate({
+      channel_id: voice.id,
+      type: 'role_id',
+      value: '0', // role id 0 表示 @everyone
+      deny: Permission.CONNECT_VOICE,
+    });
+
+    // 创建频道邀请
+    const invite = await bot.api.inviteCreate({
+      channel_id: voice.id,
+    });
+
+    // 发送临时消息
+    const msg = await bot.api.messageCreate({
+      target_id: target_id,
+      type: ApiMessageType.CARD,
+      content: JSON.stringify(createdCard(roomName, 'https://teeworlds.cn')),
+      temp_target_id: user,
+    });
+
+    // wait 3 seconds
+    await new Promise((resolve) => setTimeout(resolve, 3000));
+
+    // 删除消息
+    await bot.api.messageDelete({ msg_id: msg.msg_id });
+  };
+
   bot.onMessageBtnClick(async (event) => {
-    console.log(event);
+    switch (event.extra.body.value) {
+      case 'createRoom':
+        createRoom(event.extra.body.target_id, event.extra.body.user_id);
+        break;
+    }
   });
 };
 
@@ -249,7 +313,11 @@ const initialize = async () => {
 
   console.log(`🔄 已初始化鸦木布拉夫分组: ${gameCategory.id}`);
 
-  setupListeners();
+  setupListeners({
+    inGameRoleId,
+    roomCategoryId: roomCategory.id,
+    gameCategoryId: gameCategory.id,
+  });
   READY = true;
   log('✅ 机器人已上线');
 };

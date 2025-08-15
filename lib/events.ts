@@ -150,57 +150,57 @@ export interface JoinedChannelEvent extends SystemMessageEvent {
 }
 
 export interface ExitedChannelEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.EXITED_CHANNEL;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.EXITED_CHANNEL,
+    {
       user_id: string;
       channel_id: string;
       exited_at: number;
-    };
-  };
+    }
+  >;
 }
 
 export interface UserUpdatedEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.USER_UPDATED;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.USER_UPDATED,
+    {
       user_id: string;
       username: string;
       avatar: string;
-    };
-  };
+    }
+  >;
 }
 
 export interface SelfJoinedGuildEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.SELF_JOINED_GUILD;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.SELF_JOINED_GUILD,
+    {
       guild_id: string;
       state?: string;
-    };
-  };
+    }
+  >;
 }
 
 export interface SelfExitedGuildEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.SELF_EXITED_GUILD;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.SELF_EXITED_GUILD,
+    {
       guild_id: string;
-    };
-  };
+    }
+  >;
 }
 
 export interface MessageBtnClickEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.MESSAGE_BTN_CLICK;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.MESSAGE_BTN_CLICK,
+    {
       msg_id: string;
       user_id: string;
       value: string;
       target_id: string;
       user_info: User;
-    };
-  };
+    }
+  >;
 }
 
 // Guild Events
@@ -218,51 +218,44 @@ export interface Guild {
 }
 
 export interface UpdatedGuildEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.UPDATED_GUILD;
-    body: Guild;
-  };
+  extra: SystemMessageExtra<SystemEventType.UPDATED_GUILD, Guild>;
 }
 
 export interface DeletedGuildEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.DELETED_GUILD;
-    body: Guild;
-  };
+  extra: SystemMessageExtra<SystemEventType.DELETED_GUILD, Guild>;
 }
 
 export interface AddedBlockListEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.ADDED_BLOCK_LIST;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.ADDED_BLOCK_LIST,
+    {
       operator_id: string;
       remark: string;
       user_id: string[];
-    };
-  };
+    }
+  >;
 }
 
 export interface DeletedBlockListEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.DELETED_BLOCK_LIST;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.DELETED_BLOCK_LIST,
+    {
       operator_id: string;
       user_id: string[];
-    };
-  };
+    }
+  >;
 }
 
 export interface EmojiEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type:
-      | SystemEventType.ADDED_EMOJI
-      | SystemEventType.REMOVED_EMOJI
-      | SystemEventType.UPDATED_EMOJI;
-    body: {
+  extra: SystemMessageExtra<
+    | SystemEventType.ADDED_EMOJI
+    | SystemEventType.REMOVED_EMOJI
+    | SystemEventType.UPDATED_EMOJI,
+    {
       id: string;
       name: string;
-    };
-  };
+    }
+  >;
 }
 
 // Channel Events
@@ -272,22 +265,22 @@ export interface Emoji {
 }
 
 export interface ReactionEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.ADDED_REACTION | SystemEventType.DELETED_REACTION;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.ADDED_REACTION | SystemEventType.DELETED_REACTION,
+    {
       msg_id: string;
       user_id: string;
       channel_id: string;
       emoji: Emoji;
       channel_type: number;
-    };
-  };
+    }
+  >;
 }
 
 export interface UpdatedMessageEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.UPDATED_MESSAGE;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.UPDATED_MESSAGE,
+    {
       msg_id: string;
       content: string;
       channel_id: string;
@@ -297,31 +290,31 @@ export interface UpdatedMessageEvent extends SystemMessageEvent {
       mention_roles: number[];
       updated_at: number;
       channel_type: number;
-    };
-  };
+    }
+  >;
 }
 
 export interface DeletedMessageEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.DELETED_MESSAGE;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.DELETED_MESSAGE,
+    {
       msg_id: string;
       channel_id: string;
       channel_type: number;
-    };
-  };
+    }
+  >;
 }
 
 export interface PinnedMessageEvent extends SystemMessageEvent {
-  extra: SystemMessageExtra & {
-    type: SystemEventType.PINNED_MESSAGE | SystemEventType.UNPINNED_MESSAGE;
-    body: {
+  extra: SystemMessageExtra<
+    SystemEventType.PINNED_MESSAGE | SystemEventType.UNPINNED_MESSAGE,
+    {
       channel_id: string;
       operator_id: string;
       msg_id: string;
       channel_type: number;
-    };
-  };
+    }
+  >;
 }
 
 /**
