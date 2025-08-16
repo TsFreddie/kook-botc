@@ -167,8 +167,8 @@ const setupListeners = (config: GameConfig) => {
       // 尝试执行说书人操作，只要能点到就允许操作
       const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
 
-      // Don't call handlers if game is initializing
-      if (!game || game.isInitializing()) {
+      // Don't call handlers if game is initializing or destroyed
+      if (!game || game.isInitializing() || game.isDestroyed()) {
         return;
       }
 
@@ -185,8 +185,13 @@ const setupListeners = (config: GameConfig) => {
       // 尝试执行玩家操作
       const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
 
-      // Don't call handlers if game is initializing
-      if (game && game.isInitializing()) {
+      // Don't call handlers if game is initializing or destroyed
+      if (!game || game.isInitializing() || game.isDestroyed()) {
+        return;
+      }
+
+      // Storyteller shouldn't be able to use these
+      if (event.extra.body.user_id === game.storytellerId) {
         return;
       }
 

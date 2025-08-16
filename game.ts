@@ -50,7 +50,7 @@ interface Player {
 
 /** 游戏会话 */
 export class Game {
-  private storytellerId: string;
+  public storytellerId: string;
   private channels: string[];
   private bot: KookClient;
   private config: GameConfig;
@@ -755,12 +755,12 @@ export class Game {
    */
 
   /** Set user as active (in voice channel) */
-  private async setUserActive(user: string) {
+  private setUserActive(user: string) {
     this.activeUsers.add(user);
   }
 
   /** Set user as inactive (not in voice channel) */
-  private async setUserInactive(user: string) {
+  private setUserInactive(user: string) {
     this.activeUsers.delete(user);
   }
 
@@ -865,6 +865,36 @@ export class Game {
     return this.status === GameStatus.INITIALIZING;
   }
 
+  isDestroyed(): boolean {
+    return this.destroyed;
+  }
+
+  /** Auto-add user as playing during early game phases and send welcome message */
+  private async autoAddPlayerInEarlyPhase(user: string) {
+    // In PREPARING or WAITING_FOR_STORYTELLER, automatically set as playing
+    if (
+      (this.status === GameStatus.PREPARING ||
+        this.status === GameStatus.WAITING_FOR_STORYTELLER) &&
+      user !== this.storytellerId
+    ) {
+      if (!this.isUserPlaying(user)) {
+        await this.setUserPlaying(user);
+        // Send welcome message
+        await this.run(() =>
+          this.bot.api.messageCreate({
+            target_id: this.voiceChannelId!,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify(
+              textCard(
+                `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
+              ),
+            ),
+          }),
+        );
+      }
+    }
+  }
+
   /** Ensure user has correct mute state based on their playing status */
   private async ensureCorrectMuteState(user: string) {
     if (user === this.storytellerId) return; // Storyteller is never muted
@@ -928,35 +958,17 @@ export class Game {
 
   /** 用户进入语音频道事件 */
   async userEnteredVoiceChannel(user: string) {
-    await this.setUserActive(user);
+    if (this.destroyed) return;
+
+    this.setUserActive(user);
 
     // If user is not joined yet, join them
     if (!this.isUserJoined(user)) {
       await this.setUserJoined(user);
     }
 
-    // In PREPARING or WAITING_FOR_STORYTELLER, automatically set as playing
-    if (
-      (this.status === GameStatus.PREPARING ||
-        this.status === GameStatus.WAITING_FOR_STORYTELLER) &&
-      user !== this.storytellerId
-    ) {
-      if (!this.isUserPlaying(user)) {
-        await this.setUserPlaying(user);
-        // Send welcome message
-        await this.run(() =>
-          this.bot.api.messageCreate({
-            target_id: this.voiceChannelId!,
-            type: ApiMessageType.CARD,
-            content: JSON.stringify(
-              textCard(
-                `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
-              ),
-            ),
-          }),
-        );
-      }
-    }
+    // Auto-add as playing during early game phases
+    await this.autoAddPlayerInEarlyPhase(user);
 
     // Ensure correct mute state based on game phase and playing status
     await this.ensureCorrectMuteState(user);
@@ -968,7 +980,9 @@ export class Game {
 
   /** 用户离开语音频道事件 */
   async userExitedVoiceChannel(user: string) {
-    await this.setUserInactive(user);
+    if (this.destroyed) return;
+
+    this.setUserInactive(user);
 
     // Always unmute user when they leave voice channel to make sure they don't stay muted
     await this.unmuteUser(user);
@@ -996,6 +1010,8 @@ export class Game {
    * @param user 正在加入的玩家
    */
   async joinGame(user: string) {
+    if (this.destroyed) return;
+
     // 说书人不需要加入游戏
     if (user !== this.storytellerId) {
       // Always join them to the game (give role and route)
@@ -1003,28 +1019,14 @@ export class Game {
         await this.setUserJoined(user);
       }
 
+      // Auto-add as playing during early game phases
+      await this.autoAddPlayerInEarlyPhase(user);
+
+      // For non-early phases, ensure correct mute state
       if (
-        this.status === GameStatus.PREPARING ||
-        this.status === GameStatus.WAITING_FOR_STORYTELLER
+        this.status !== GameStatus.PREPARING &&
+        this.status !== GameStatus.WAITING_FOR_STORYTELLER
       ) {
-        // 只有在准备阶段才会自动加入游戏玩家中
-        if (!this.isUserPlaying(user)) {
-          await this.setUserPlaying(user);
-          // Send welcome message
-          await this.run(() =>
-            this.bot.api.messageCreate({
-              target_id: this.voiceChannelId!,
-              type: ApiMessageType.CARD,
-              content: JSON.stringify(
-                textCard(
-                  `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
-                ),
-              ),
-            }),
-          );
-        }
-      } else {
-        // 其他阶段只加入到旁观者阵营（禁言)
         if (!this.isUserPlaying(user)) {
           await this.muteUser(user);
         }
