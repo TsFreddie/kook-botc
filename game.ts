@@ -5,6 +5,7 @@ import { MessageQueue } from './msg-queue.ts';
 import type { StorytellerTemplateParams } from './templates/storyteller.ts';
 import type { ActionButton } from './templates/types.ts';
 import type { Router } from './manager.ts';
+import { townCard } from './templates/town.ts';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -47,8 +48,7 @@ interface Player {
 /** 游戏会话 */
 export class Game {
   private storytellerId: string;
-  private textChannels: string[];
-  private voiceChannels: string[];
+  private channels: string[];
   private bot: KookClient;
   private config: GameConfig;
 
@@ -60,6 +60,7 @@ export class Game {
 
   private townsquareControl?: MessageQueue;
   private townsquarePlayerList?: MessageQueue;
+  private townCard?: MessageQueue;
 
   /** 请求计数，只有所有请求都处理完才会进行销毁 */
   private runCounter: number = 0;
@@ -96,13 +97,13 @@ export class Game {
   public voiceChannelId?: string;
   public invite?: string;
   public status: GameStatus;
+  public isVoiceChannelOpen: boolean = false;
 
   public name: string;
 
   constructor(storytellerId: string, bot: KookClient, config: GameConfig, router: Router) {
     this.storytellerId = storytellerId;
-    this.textChannels = [];
-    this.voiceChannels = [];
+    this.channels = [];
     this.bot = bot;
     this.config = config;
     this.router = router;
@@ -157,7 +158,7 @@ export class Game {
           // 将小镇排序置顶
           await this.bot.api.channelUpdate({ channel_id: this.categoryId, level: 0 });
 
-          this.textChannels.push(this.categoryId);
+          this.channels.push(this.categoryId);
         }),
       ]);
 
@@ -209,7 +210,7 @@ export class Game {
             })
           ).id;
 
-          this.voiceChannels.push(this.voiceChannelId);
+          this.channels.push(this.voiceChannelId);
           this.router.routeChannel(this.voiceChannelId);
 
           // 创建邀请连接
@@ -220,7 +221,20 @@ export class Game {
       ]);
 
       if (!this.storytellerChannelId) throw new Error('创建游戏失败: 说书人频道ID无效');
+      if (!this.townsquareChannelId) throw new Error('创建游戏失败: 城镇广场频道ID无效');
       if (!this.invite) throw new Error('创建游戏失败: 邀请连接无效');
+
+      // 初始化城镇广场控制卡片
+      this.townCard = new MessageQueue(
+        this.bot,
+        (
+          await this.bot.api.messageCreate({
+            target_id: this.storytellerChannelId,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify(townCard(this.name, this.invite, this.isVoiceChannelOpen)),
+          })
+        ).msg_id,
+      );
 
       // 初始化说书人频道
       this.storytellerControl = new MessageQueue(
@@ -231,9 +245,7 @@ export class Game {
             type: ApiMessageType.CARD,
             content: JSON.stringify({
               image: this.config.assets['day']!,
-              invite: this.invite!,
-              header: '**(font)🌅 城镇广场(font)[warning]**',
-              status: `(font)已创建${this.name}(font)[success]，请说书人使用[邀请链接](${this.invite})加入语音\n(font)加入后请回到这个频道进行后续操作(font)[warning]`,
+              status: `**(font)🌅 说书人控制台(font)[warning]**\n(font)已创建${this.name}(font)[success]，请说书人使用[邀请链接](${this.invite})加入语音\n(font)加入后请回到这个频道进行后续操作(font)[warning]`,
             } satisfies StorytellerTemplateParams),
             template_id: this.config.templates.storyteller,
           })
@@ -284,7 +296,8 @@ export class Game {
         ]);
       }
 
-      this.textChannels.push(channel.id);
+      this.channels.push(channel.id);
+      this.router.routeChannel(channel.id);
       return channel;
     });
   }
@@ -298,17 +311,14 @@ export class Game {
       // 注销说书人
       this.router.unrouteUser(this.storytellerId);
 
-      // 注销语音频道
-      for (const channel of this.voiceChannels) {
+      // 注销频道
+      for (const channel of this.channels) {
         this.router.unrouteChannel(channel);
       }
 
       // 删除所有频道
       await Promise.allSettled(
-        this.textChannels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
-      );
-      await Promise.allSettled(
-        this.voiceChannels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
+        this.channels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
       );
 
       // 删除角色
@@ -376,7 +386,8 @@ export class Game {
         status =
           '现在是自由活动时间\n(font)你和镇民一样可以前往各地，同时你还可以前往玩家小屋(font)[warning]';
         buttons = [
-          { text: '🏢 广场集会', theme: 'info', value: '[st]gameNight' },
+          { text: '🌄 夜幕降临', theme: 'info', value: '[st]gameNight' },
+          { text: '广场集会', theme: 'warning', value: '[st]gameDay' },
           { text: '前往小屋', theme: 'success', value: '[st]listGoto' },
         ];
         break;
@@ -386,9 +397,7 @@ export class Game {
       this.storytellerControl!.push({
         content: JSON.stringify({
           image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
-          invite: this.invite!,
-          header: `**(font)🌅 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}`,
-          status,
+          status: `**(font)🌅 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
           groups: [
             buttons as any,
             [
@@ -432,6 +441,52 @@ export class Game {
 
     // TODO: notify game status changes
     await this.updateStoryTellerControl();
+  }
+
+  async gameOpen() {
+    if (!this.voiceChannelId) return;
+
+    this.isVoiceChannelOpen = true;
+
+    // 允许所有人查看语音频道
+    this.run(() =>
+      Promise.all([
+        this.bot.api.channelRoleUpdate({
+          channel_id: this.voiceChannelId!,
+          type: 'role_id',
+          value: '0',
+          allow: Permission.CONNECT_VOICE,
+        }),
+        this.updateTownCard(),
+      ]),
+    );
+  }
+
+  async gameInviteOnly() {
+    if (!this.voiceChannelId) return;
+
+    this.isVoiceChannelOpen = false;
+
+    // 拒绝所有人查看语音频道
+    this.run(() =>
+      Promise.all([
+        this.bot.api.channelRoleUpdate({
+          channel_id: this.voiceChannelId!,
+          type: 'role_id',
+          value: '0',
+          allow: 0,
+        }),
+        this.updateTownCard(),
+      ]),
+    );
+  }
+
+  private async updateTownCard() {
+    if (!this.townCard || !this.invite) return;
+
+    await this.townCard.push({
+      content: JSON.stringify(townCard(this.name, this.invite, this.isVoiceChannelOpen)),
+    });
   }
 
   private async enterPrepareState() {

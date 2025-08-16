@@ -5,13 +5,6 @@
     "size": "lg",
     "modules": [
       {
-        "type": "section",
-        "text": {
-          "type": "kmarkdown",
-          "content": "邀请连接：[{{ data.invite }}]({{ data.invite }})"
-        }
-      },
-      {
         "type": "container",
         "elements": [
           {
@@ -19,13 +12,6 @@
             "src": "{{ data.image }}"
           }
         ]
-      },
-      {
-        "type": "section",
-        "text": {
-          "type": "kmarkdown",
-          "content": "> (font)游戏过程中请始终查看该频道，否则可能会错过重要消息(font)[secondary]\n> (font)若不小心退出了语音，可以使用邀请连接重新进入城镇广场语音(font)[secondary]\n\n\n{{ data.header|json_escape }}"
-        }
       },
       {
         "type": "section",

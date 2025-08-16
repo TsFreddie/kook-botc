@@ -8,7 +8,7 @@ export const createdCard = (name: string, channelId: string) => [
         type: 'section',
         text: {
           type: 'kmarkdown',
-          content: '如果你已是「说书人」，点击**【创建】**按钮创建小镇',
+          content: '如果你已是「说书人」，点击**(font)【创建】(font)[primary]**按钮创建小镇',
         },
         mode: 'right',
         accessory: {
@@ -46,7 +46,7 @@ export const existedCard = (name: string, channelId: string) => [
         type: 'section',
         text: {
           type: 'kmarkdown',
-          content: '如果你已是「说书人」，点击**【创建】**按钮创建小镇',
+          content: '如果你已是「说书人」，点击**(font)【创建】(font)[primary]**按钮创建小镇',
         },
         mode: 'right',
         accessory: {
@@ -67,7 +67,7 @@ export const existedCard = (name: string, channelId: string) => [
         type: 'section',
         text: {
           type: 'kmarkdown',
-          content: `(font)你目前正在主持${name}，若要创建新的小镇请先前往城镇广场拆除小镇(font)[warning] | 请点击前往：(chn)${channelId}(chn)`,
+          content: `(font)你目前正在${name}进行游戏，若要创建新的小镇需要由说书人拆除小镇或将你移除小镇(font)[warning] | 请点击前往：(chn)${channelId}(chn)`,
         },
       },
     ],
