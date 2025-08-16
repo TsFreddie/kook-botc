@@ -23,9 +23,14 @@ export const introCard = [
             '如果你是受邀来玩的玩家，可以在【游戏房间】频道列表加入公开房间，或向你的「说书人」索要邀请链接',
         },
       },
-      {
-        type: 'divider',
-      },
+    ],
+  },
+];
+
+export const introCardAction = [
+  {
+    type: 'card',
+    modules: [
       {
         type: 'section',
         text: {
@@ -42,6 +47,21 @@ export const introCard = [
           },
           click: 'return-val',
           value: 'createRoom',
+        },
+      },
+    ],
+  },
+];
+
+export const creatingInfo = [
+  {
+    type: 'card',
+    modules: [
+      {
+        type: 'section',
+        text: {
+          type: 'kmarkdown',
+          content: '正在创建小镇，请耐心等待...',
         },
       },
     ],

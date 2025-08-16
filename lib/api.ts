@@ -33,7 +33,7 @@ export enum VoiceQuality {
  * Each permission is represented by a bit position (0-30)
  * To check if a permission is granted: (permissions & (1 << PermissionFlag.ADMIN)) === (1 << PermissionFlag.ADMIN)
  */
-export enum PermissionFlag {
+enum PermissionFlag {
   /** 管理员 - 拥有此权限会获得完整的管理权，包括绕开所有其他权限（包括频道权限）限制，属于危险权限 */
   ADMIN = 0,
   /** 管理服务器 - 拥有此权限的成员可以修改服务器名称和更换区域 */
@@ -887,7 +887,7 @@ export class KookApiClient {
       const data = (await response.json()) as KookApiResponse<T>;
 
       if (data.code !== 0) {
-        throw new Error(`API Error ${data.code}: ${data.message}`);
+        throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
       }
 
       if (this.debug) {

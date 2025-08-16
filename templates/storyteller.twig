@@ -1,0 +1,74 @@
+[
+  {
+    "type": "card",
+    "theme": "secondary",
+    "size": "lg",
+    "modules": [
+      {
+        "type": "section",
+        "text": {
+          "type": "plain-text",
+          "content": "邀请链接：[{{ data.invite }}]({{ data.invite }})"
+        }
+      },
+      {
+        "type": "divider"
+      }
+{% if data.buttons and data.buttons|length > 0 %}
+    {% for button in data.buttons %}
+      ,{
+        "type": "section",
+        "text": {
+          "type": "plain-text",
+          "content": "{{ button.desc }}"
+        },
+        "mode": "right",
+        "accessory": {
+          "type": "button",
+          "theme": "{{ button.theme }}",
+          "text": {
+            "type": "plain-text",
+            "content": "{{ button.text }}",
+            "click": "return-val",
+            "value": "{{ button.value }}"
+          }
+        }
+      }
+    {% endfor %}
+{% endif %}
+{% if data.groups and data.groups|length > 0 %}
+    {% for group in data.groups %}
+      ,{
+        "type": "action-group",
+        "elements": [
+        {% for button in group %}
+            {% if not loop.first %}
+          ,
+            {% endif %}
+          {
+            "type": "button",
+            "theme": "{{ button.theme }}",
+            "text": {
+              "type": "plain-text",
+              "content": "{{ button.text }}",
+              "click": "return-val",
+              "value": "{{ button.value }}"
+            }
+          }
+        {% endfor %}
+        ]
+      }
+    {% endfor %}
+{% endif %}
+{% if data.footer %}
+      ,{
+        "type": "section",
+        "text": {
+        "type": "kmarkdown",
+        "content": "{{ data.footer }}"
+        }
+      }
+{% endif %}
+    ]
+  }
+]

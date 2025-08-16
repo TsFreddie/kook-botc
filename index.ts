@@ -1,8 +1,11 @@
 import { ApiChannelType, ApiMessageType, Permission } from './lib/api.ts';
 import { KookClient, type KookClientConfig } from './lib/kook.ts';
 import { config as dotenv } from 'dotenv';
-import { introCard } from './templates/intro.ts';
-import { createdCard } from './templates/created.ts';
+import { creatingInfo, introCard, introCardAction } from './templates/intro.ts';
+import { createdCard, existedCard } from './templates/created.ts';
+import { Manager } from './manager.ts';
+import type { GameConfig } from './types.ts';
+import { GameStatus } from './game.ts';
 
 dotenv({ quiet: true });
 
@@ -83,11 +86,7 @@ const log = async (msg: string) => {
   }
 };
 
-interface GameConfig {
-  inGameRoleId: number;
-  roomCategoryId: string;
-  gameCategoryId: string;
-}
+let GLOBAL_MANAGER: Manager | undefined;
 
 // 配置机器人监听
 const setupListeners = (config: GameConfig) => {
@@ -108,97 +107,99 @@ const setupListeners = (config: GameConfig) => {
         type: ApiMessageType.CARD,
         content: JSON.stringify(introCard),
       });
+
+      // 发送模版消息
+      await bot.api.messageCreate({
+        target_id: event.target_id,
+        type: ApiMessageType.CARD,
+        content: JSON.stringify(introCardAction),
+      });
     });
   }
 
+  // 游戏会话管理
+  const MANAGER = new Manager(bot, config);
+  GLOBAL_MANAGER = MANAGER;
+
   /** 创建房间 */
-  const createRoom = async (target_id: string, user: string) => {
-    // 生成随机5位数字，用0填充
-    const randomNumber = Math.floor(Math.random() * 100000)
-      .toString()
-      .padStart(5, '0');
-    const roomName = `组团 ${randomNumber}`;
-
-    // 创建主页面文本频道
-    const text = await bot.api.channelCreate({
-      guild_id,
-      name: roomName,
-      type: ApiChannelType.TEXT,
-      parent_id: config.gameCategoryId,
-    });
-
-    // 创建大厅语音频道
-    const voice = await bot.api.channelCreate({
-      guild_id,
-      name: roomName,
-      type: ApiChannelType.VOICE,
-      limit_amount: 20,
-      parent_id: config.roomCategoryId,
-    });
-
-    // 更新频道权限，拒绝所有人加入语音
-    await bot.api.channelRoleUpdate({
-      channel_id: voice.id,
-      type: 'role_id',
-      value: '0', // role id 0 表示 @everyone
-      deny: Permission.CONNECT_VOICE,
-    });
-
-    // 创建频道邀请
-    const invite = await bot.api.inviteCreate({
-      channel_id: voice.id,
-    });
-
-    // 发送临时消息
-    const msg = await bot.api.messageCreate({
-      target_id: target_id,
-      type: ApiMessageType.CARD,
-      content: JSON.stringify(createdCard(roomName, 'https://teeworlds.cn')),
+  const createRoom = async (target: string, user: string, message: string) => {
+    // 更新消息为创建中
+    await bot.api.messageUpdate({
+      msg_id: message,
+      content: JSON.stringify(creatingInfo),
       temp_target_id: user,
     });
 
-    // wait 3 seconds
-    await new Promise((resolve) => setTimeout(resolve, 3000));
+    const game = await MANAGER.createGame(user);
 
-    // 删除消息
-    await bot.api.messageDelete({ msg_id: msg.msg_id });
+    if (game.status === GameStatus.INITIALIZING) {
+      // 初始化中，不要干任何事情
+      return;
+    }
+
+    if (game.status === GameStatus.WAITING_FOR_STORYTELLER) {
+      // 更新为导向消息
+      await bot.api.messageUpdate({
+        msg_id: message,
+        content: JSON.stringify(createdCard(game.name, game.storytellerChannelId!)),
+        temp_target_id: user,
+      });
+    } else {
+      // 更新为指南消息
+      await bot.api.messageUpdate({
+        msg_id: message,
+        content: JSON.stringify(existedCard(game.name, game.storytellerChannelId!)),
+        temp_target_id: user,
+      });
+    }
   };
 
   bot.onMessageBtnClick(async (event) => {
     switch (event.extra.body.value) {
       case 'createRoom':
-        createRoom(event.extra.body.target_id, event.extra.body.user_id);
+        await createRoom(
+          event.extra.body.target_id,
+          event.extra.body.user_id,
+          event.extra.body.msg_id,
+        );
         break;
     }
   });
+
+  bot.onJoinedChannel(async (event) => {});
+
+  bot.onExitedChannel(async (event) => {});
 };
 
 // 清理流程
 const cleanup = async () => {
   if (!READY) return;
-
   READY = false;
+
+  if (GLOBAL_MANAGER) {
+    await GLOBAL_MANAGER.cleanup();
+  }
 };
 
 // 初始化流程（配置身份组和频道分组）
 const initialize = async () => {
-  // 检查是否存在"游戏中"身份，没有的话创建一个
+  // 检查是否存在"说书人"身份，没有的话创建一个
   const roles = await bot.api.roleList({ guild_id });
 
-  let inGameRoleId = roles.items.filter((role) => role.name === '游戏中')[0]?.role_id;
-  if (!inGameRoleId) {
-    const role = await bot.api.roleCreate({ guild_id, name: '游戏中' });
+  let storytellerRoleId = roles.items.filter((role) => role.name === '说书人')[0]?.role_id;
+  if (!storytellerRoleId) {
+    const role = await bot.api.roleCreate({ guild_id, name: '说书人' });
     console.log(role);
-    inGameRoleId = role.role_id;
+    storytellerRoleId = role.role_id;
   }
 
-  if (!inGameRoleId) {
+  if (!storytellerRoleId) {
     console.error('❌ 身份组初始化失败...');
     shutdown();
     return;
   }
 
-  console.log(`🔄 已初始化身份组: ${inGameRoleId}`);
+  console.log(`🔄 已初始化身份组: ${storytellerRoleId}`);
 
   // 检查是否存在"游戏房间"分组，没有的话创建一个
   const channels = await bot.api.channelList({ guild_id });
@@ -229,94 +230,11 @@ const initialize = async () => {
 
   console.log(`🔄 已初始化游戏房间分组: ${roomCategory.id}`);
 
-  // 检查分组是否禁用了身份组查看的权限，没有的话设置一下
-  const roomPermissions = await bot.api.channelRoleIndex(roomCategory.id);
-  let roomRole = roomPermissions.permission_overwrites.find(
-    (overwrite) => overwrite.role_id === inGameRoleId,
-  );
-  if (!roomRole) {
-    await bot.api.channelRoleCreate({
-      channel_id: roomCategory.id,
-      type: 'role_id',
-      value: inGameRoleId.toString(),
-    });
-  }
-
-  if (!roomRole || !(roomRole.deny & Permission.VIEW_CHANNELS)) {
-    await bot.api.channelRoleUpdate({
-      channel_id: roomCategory.id,
-      type: 'role_id',
-      value: inGameRoleId.toString(),
-      deny: (roomRole?.deny || 0) | Permission.VIEW_CHANNELS,
-    });
-  }
-
-  // 检查是否存在"鸦木布拉夫"分组，没有的话创建一个
-  let gameCategory;
-
-  for (const channel of channels.items) {
-    if (channel.is_category && channel.name === '鸦木布拉夫') {
-      gameCategory = channel;
-      break;
-    }
-  }
-
-  if (!gameCategory) {
-    const category = await bot.api.channelCreate({
-      guild_id,
-      name: '鸦木布拉夫',
-      is_category: 1,
-    });
-    gameCategory = category;
-  }
-
-  if (!gameCategory) {
-    console.error('❌ 鸦木布拉夫分组初始化失败...');
-    shutdown();
-    return;
-  }
-
-  // 设置鸦木布拉夫分组权限
-  const gamePermissions = await bot.api.channelRoleIndex(gameCategory.id);
-  let gameRole = gamePermissions.permission_overwrites.find(
-    (overwrite) => overwrite.role_id === inGameRoleId,
-  );
-  if (!gameRole) {
-    await bot.api.channelRoleCreate({
-      channel_id: gameCategory.id,
-      type: 'role_id',
-      value: inGameRoleId.toString(),
-    });
-  }
-
-  if (!gameRole || !(gameRole.allow & Permission.VIEW_CHANNELS)) {
-    await bot.api.channelRoleUpdate({
-      channel_id: gameCategory.id,
-      type: 'role_id',
-      value: inGameRoleId.toString(),
-      allow: (gameRole?.allow || 0) | Permission.VIEW_CHANNELS,
-    });
-  }
-
-  let gameEveryoneRole = gamePermissions.permission_overwrites.find(
-    (overwrite) => overwrite.role_id === 0,
-  );
-
-  if (!gameEveryoneRole || !(gameEveryoneRole.deny & Permission.VIEW_CHANNELS)) {
-    await bot.api.channelRoleUpdate({
-      channel_id: gameCategory.id,
-      type: 'role_id',
-      value: '0',
-      deny: (gameEveryoneRole?.deny || 0) | Permission.VIEW_CHANNELS,
-    });
-  }
-
-  console.log(`🔄 已初始化鸦木布拉夫分组: ${gameCategory.id}`);
-
   setupListeners({
-    inGameRoleId,
+    guildId: guild_id,
+    storytellerRoleId: storytellerRoleId,
     roomCategoryId: roomCategory.id,
-    gameCategoryId: gameCategory.id,
+    // gameCategoryId: gameCategory.id,
   });
   READY = true;
   log('✅ 机器人已上线');
