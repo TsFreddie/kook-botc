@@ -175,6 +175,19 @@ const setupListeners = (config: GameConfig) => {
       return;
     }
 
+    if (value.startsWith('[pl]')) {
+      // 尝试执行玩家操作
+      const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
+      const handlerName = value.slice(4);
+      const userId = event.extra.body.user_id;
+
+      const handler = (game as any)[handlerName];
+      if (handler && typeof handler === 'function') {
+        await handler.call(game, userId);
+      }
+      return;
+    }
+
     switch (value) {
       case 'createRoom':
         await createRoom(

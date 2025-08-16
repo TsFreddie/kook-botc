@@ -80,6 +80,21 @@ export const townHeader = (name: string, invite: string) => [
         },
       },
       {
+        type: 'action-group',
+        elements: [
+          {
+            type: 'button',
+            theme: 'danger',
+            text: {
+              type: 'plain-text',
+              content: '离开小镇',
+            },
+            click: 'return-val',
+            value: '[pl]gameLeave',
+          },
+        ],
+      },
+      {
         type: 'context',
         elements: [
           {

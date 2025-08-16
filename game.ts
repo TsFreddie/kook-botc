@@ -491,6 +491,10 @@ export class Game {
     await this.cleanup();
   }
 
+  async gameLeave(userId: string) {
+    await this.playerLeave(userId);
+  }
+
   async gameDay() {
     this.status = GameStatus.DAY;
 
