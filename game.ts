@@ -5,7 +5,7 @@ import { MessageQueue } from './msg-queue.ts';
 import type { StorytellerTemplateParams } from './templates/storyteller.ts';
 import type { ActionButton } from './templates/types.ts';
 import type { Router } from './manager.ts';
-import { townCard } from './templates/town.ts';
+import { townCard, townHeader } from './templates/town.ts';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -120,26 +120,26 @@ export class Game {
     await this.run(async () => {
       await Promise.all([
         // 赋予说书人角色
-        this.run(async () => {
+        (async () => {
           await this.bot.api.roleGrant({
             guild_id: this.config.guildId,
             user_id: this.storytellerId,
             role_id: this.config.storytellerRoleId,
           });
-        }),
+        })(),
 
         // 创建游戏所需角色
-        this.run(async () => {
+        (async () => {
           this.roleId = (
             await this.bot.api.roleCreate({
               guild_id: this.config.guildId,
               name: this.name,
             })
           ).role_id;
-        }),
+        })(),
 
         // 创建频道分组
-        this.run(async () => {
+        (async () => {
           this.categoryId = (
             await this.bot.api.channelCreate({
               guild_id: this.config.guildId,
@@ -159,21 +159,22 @@ export class Game {
           await this.bot.api.channelUpdate({ channel_id: this.categoryId, level: 0 });
 
           this.channels.push(this.categoryId);
-        }),
+          this.router.routeChannel(this.categoryId);
+        })(),
       ]);
 
       await Promise.all([
         // 赋予说书人游戏角色
-        this.run(async () => {
+        (async () => {
           await this.bot.api.roleGrant({
             guild_id: this.config.guildId,
             user_id: this.storytellerId,
             role_id: this.roleId,
           });
-        }),
+        })(),
 
         // 赋予分组权限
-        this.run(async () => {
+        (async () => {
           if (!this.categoryId) throw new Error('创建游戏失败: 分组ID无效');
           await this.bot.api.channelRoleUpdate({
             channel_id: this.categoryId,
@@ -181,24 +182,24 @@ export class Game {
             value: this.roleId.toString(),
             allow: Permission.VIEW_CHANNELS,
           });
-        }),
+        })(),
 
         // 创建玩家频道
-        this.run(async () => {
+        (async () => {
           this.townsquareChannelId = (
             await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
           )?.id;
-        }),
+        })(),
 
         // 创建说书人频道
-        this.run(async () => {
+        (async () => {
           this.storytellerChannelId = (
             await this.createTextChannel('🏢 城镇广场 (说书人)', ChannelMode.Storyteller)
           )?.id;
-        }),
+        })(),
 
         // 创建语音房间频道和邀请连接
-        this.run(async () => {
+        (async () => {
           this.voiceChannelId = (
             await this.bot.api.channelCreate({
               guild_id: this.config.guildId,
@@ -217,24 +218,33 @@ export class Game {
           this.invite = (
             await this.bot.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })
           ).url;
-        }),
+        })(),
       ]);
 
       if (!this.storytellerChannelId) throw new Error('创建游戏失败: 说书人频道ID无效');
       if (!this.townsquareChannelId) throw new Error('创建游戏失败: 城镇广场频道ID无效');
       if (!this.invite) throw new Error('创建游戏失败: 邀请连接无效');
 
-      // 初始化城镇广场控制卡片
-      this.townCard = new MessageQueue(
-        this.bot,
-        (
-          await this.bot.api.messageCreate({
-            target_id: this.storytellerChannelId,
-            type: ApiMessageType.CARD,
-            content: JSON.stringify(townCard(this.name, this.invite, this.isVoiceChannelOpen)),
-          })
-        ).msg_id,
-      );
+      // 初始化城镇广场抬头卡片
+      await Promise.all([
+        (async () =>
+          (this.townCard = new MessageQueue(
+            this.bot,
+            (
+              await this.bot.api.messageCreate({
+                target_id: this.storytellerChannelId!,
+                type: ApiMessageType.CARD,
+                content: JSON.stringify(townCard(this.name, this.invite!, this.isVoiceChannelOpen)),
+              })
+            ).msg_id,
+          )))(),
+
+        this.bot.api.messageCreate({
+          target_id: this.townsquareChannelId!,
+          type: ApiMessageType.CARD,
+          content: JSON.stringify(townHeader(this.name, this.invite!)),
+        }),
+      ]);
 
       // 初始化说书人频道
       this.storytellerControl = new MessageQueue(
@@ -338,9 +348,9 @@ export class Game {
     };
 
     if (this.runCounter > 0) {
-      return new Promise<void>((resolve) => {
+      return new Promise<void>((resolve, reject) => {
         this.cleanupCallback = () => {
-          routine().finally(resolve);
+          routine().then(resolve).catch(reject);
         };
       });
     } else {
