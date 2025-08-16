@@ -5,9 +5,6 @@ export interface TownsquareTemplateParams {
   /** 抬头图片 */
   image: string;
 
-  /** 头部信息 */
-  header: string;
-
   /** 状态信息 */
   status: string;
 

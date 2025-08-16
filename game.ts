@@ -3,6 +3,7 @@ import type { GameConfig } from './types';
 import { ApiChannelType, ApiMessageType, Permission, VoiceQuality } from './lib/api.ts';
 import { MessageQueue } from './msg-queue.ts';
 import type { StorytellerTemplateParams } from './templates/storyteller.ts';
+import type { TownsquareTemplateParams } from './templates/townsquare.ts';
 import type { ActionButton } from './templates/types.ts';
 import type { Router } from './manager.ts';
 import { townCard, townHeader } from './templates/town.ts';
@@ -259,6 +260,23 @@ export class Game {
         ).msg_id,
       );
 
+      // 初始化城镇广场控制台
+      this.townsquareControl = new MessageQueue(
+        this.bot,
+        (
+          await this.bot.api.messageCreate({
+            target_id: this.townsquareChannelId,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify({
+              image: this.config.assets['day']!,
+              status: `**(font)🌅 城镇广场(font)[warning]**\n(font)已创建${this.name}(font)[success]，请使用[邀请链接](${this.invite})加入语音`,
+              invite: this.invite!,
+            } satisfies TownsquareTemplateParams),
+            template_id: this.config.templates.townsquare,
+          })
+        ).msg_id,
+      );
+
       this.status = GameStatus.WAITING_FOR_STORYTELLER;
 
       if (!this.storytellerId) throw new Error('创建游戏失败: 说书人ID无效');
@@ -423,6 +441,48 @@ export class Game {
     );
   }
 
+  private async updateTownsquareControl() {
+    let status: string = '';
+    let mode: string = '';
+    let buttons: ActionButton[] = [];
+    let icon = this.status === GameStatus.NIGHT ? '🌠' : '🌅';
+
+    switch (this.status) {
+      case GameStatus.PREPARING:
+        mode = `准备阶段`;
+        status = '小镇正在准备中，请耐心等待说书人开始游戏';
+        buttons = [];
+        break;
+      case GameStatus.NIGHT:
+        mode = `夜晚阶段`;
+        status = '夜幕降临，镇民们回到各自的小屋休息';
+        buttons = [];
+        break;
+      case GameStatus.DAY:
+        mode = `白天阶段 - 广场集会`;
+        status = '镇民们聚集在广场中进行讨论\n(font)可以自由发言和讨论(font)[info]';
+        buttons = [];
+        break;
+      case GameStatus.ROAMING:
+        mode = `白天阶段 - 自由活动`;
+        status = '现在是自由活动时间\n(font)可以前往各地进行私下交流(font)[info]';
+        buttons = [];
+        break;
+    }
+
+    this.run(async () =>
+      this.townsquareControl!.update({
+        content: JSON.stringify({
+          image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
+          status: `**(font)${icon} 城镇广场(font)[warning]** (font)${mode}(font)[secondary]\n${status}`,
+          invite: this.invite!,
+          groups: buttons.length > 0 ? [buttons as any] : undefined,
+        } satisfies TownsquareTemplateParams),
+        template_id: this.config.templates.townsquare,
+      }),
+    );
+  }
+
   async gameStart() {
     await this.gameNight();
   }
@@ -435,21 +495,21 @@ export class Game {
     this.status = GameStatus.DAY;
 
     // TODO: move people into the town square
-    await this.updateStoryTellerControl();
+    await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
   async gameNight() {
     this.status = GameStatus.NIGHT;
 
     // TODO: move people into their cottages
-    await this.updateStoryTellerControl();
+    await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
   async gameRoam() {
     this.status = GameStatus.ROAMING;
 
     // TODO: notify game status changes
-    await this.updateStoryTellerControl();
+    await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
   async gameOpen() {
@@ -500,7 +560,7 @@ export class Game {
 
   private async enterPrepareState() {
     this.status = GameStatus.PREPARING;
-    await this.updateStoryTellerControl();
+    await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
   private async playerJoin(user: string) {
