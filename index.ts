@@ -8,6 +8,7 @@ import type { GameConfig } from './types.ts';
 import { GameStatus } from './game.ts';
 import { storytellerTwig } from './templates/storyteller.ts';
 import { townsqareTwig } from './templates/townsquare.ts';
+import { AsyncQueue } from './async-queue.ts';
 
 dotenv({ quiet: true });
 
@@ -123,6 +124,8 @@ const setupListeners = (config: GameConfig) => {
   const MANAGER = new SessionRouter(bot, config);
   GLOBAL_MANAGER = MANAGER;
 
+  const asyncQueue = new AsyncQueue();
+
   /** 创建房间 */
   const createRoom = async (target: string, user: string, message: string) => {
     // 更新消息为创建中
@@ -132,7 +135,8 @@ const setupListeners = (config: GameConfig) => {
       temp_target_id: user,
     });
 
-    const game = await MANAGER.createGame(user);
+    // 同时只能创建一个房间
+    const game = await asyncQueue.push(() => MANAGER.createGame(user));
 
     if (game.status === GameStatus.INITIALIZING) {
       // 初始化中，不要干任何事情
@@ -160,14 +164,13 @@ const setupListeners = (config: GameConfig) => {
     const value = event.extra.body.value;
 
     if (value.startsWith('[st]')) {
-      // 尝试执行说书人操作
-      console.log(typeof event.extra.body.user_id);
-      const game = await MANAGER.getGameByUserId(event.extra.body.user_id);
+      // 尝试执行说书人操作，只要能点到就允许操作
+      const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
       const handlerName = value.slice(4);
 
       const handler = (game as any)[handlerName];
       if (handler && typeof handler === 'function') {
-        handler.call(game);
+        await handler.call(game);
       }
       return;
     }
@@ -188,18 +191,34 @@ const setupListeners = (config: GameConfig) => {
     const channel = event.extra.body.channel_id;
     const userGame = MANAGER.getGameByUserId(user);
     // 用户已经在游戏里了，暂时不需要处理任何事情
-    // TODO：可能需要统计玩家在语音频道进出的数量，所以还是得通知 game
-    if (!userGame) return;
+    if (userGame && userGame.isGameChannel(channel)) {
+      // 通知玩家加入游戏频道
+      await userGame.joinChannel(user);
+      return;
+    }
 
     const game = MANAGER.getGameByChannelId(channel);
     // 频道不属于任何游戏，不用管
     if (!game) return;
 
+    // 正在游戏中的玩家加入了另一个游戏的频道，踢出语音频道
+    if (game && userGame) {
+      await bot.api.channelKickout(channel, user);
+      return;
+    }
+
     // 用户不在游戏内，加入游戏
     await game.joinGame(event.extra.body.user_id);
   });
 
-  bot.onExitedChannel(async (event) => {});
+  bot.onExitedChannel(async (event) => {
+    const user = event.extra.body.user_id;
+    const channel = event.extra.body.channel_id;
+    const game = MANAGER.getGameByChannelId(channel);
+    if (!game) return;
+
+    await game.leaveChannel(user);
+  });
 };
 
 // 清理流程

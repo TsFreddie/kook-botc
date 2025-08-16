@@ -43,6 +43,8 @@ interface Player {
   id: string;
   slot: number;
   status: PlayerStatus;
+  /** 玩家是否还在游戏中 */
+  left: boolean;
 }
 
 /** 游戏会话 */
@@ -89,8 +91,8 @@ export class Game {
   /** 只记录正在游玩的玩家 */
   private players: Player[];
 
-  /** 旁观者 ID */
-  private spectators: Set<string>;
+  /** 活跃用户 */
+  private activeUsers: Set<string>;
 
   public townsquareChannelId?: string;
   public storytellerChannelId?: string;
@@ -110,7 +112,7 @@ export class Game {
     this.roleId = -1;
     this.status = GameStatus.INITIALIZING;
     this.players = [];
-    this.spectators = new Set();
+    this.activeUsers = new Set();
     this.name = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
@@ -299,8 +301,8 @@ export class Game {
           }),
           this.bot.api.channelRoleUpdate({
             channel_id: channel.id,
-            type: 'role_id',
-            value: this.config.storytellerRoleId.toString(),
+            type: 'user_id',
+            value: this.storytellerId,
             allow: Permission.VIEW_CHANNELS,
           }),
         ]);
@@ -371,7 +373,10 @@ export class Game {
         met = ` (met)${this.storytellerId}(met)`;
         status =
           '小镇已就绪，在此发送的内容将转发给所有玩家\n(font)建议利用现在这个时机向玩家发送剧本和需要解释的规则等(font)[warning]';
-        buttons = [{ text: '⭐ 开始游戏', theme: 'info', value: '[st]gameStart' }];
+        buttons = [
+          { text: '⭐ 开始游戏', theme: 'info', value: '[st]gameStart' },
+          { text: '踢出玩家', theme: 'info', value: '[st]listKick' },
+        ];
         break;
       case GameStatus.NIGHT:
         mode = `夜晚阶段`;
@@ -407,7 +412,7 @@ export class Game {
       this.storytellerControl!.update({
         content: JSON.stringify({
           image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
-          status: `**(font)🌅 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
+          status: `**(font)${icon} 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
           groups: [
             buttons as any,
             [
@@ -424,7 +429,6 @@ export class Game {
   }
 
   async gameStart() {
-    // TODO: lock player list, create cottages
     await this.gameNight();
   }
 
@@ -504,41 +508,94 @@ export class Game {
     await this.updateStoryTellerControl();
   }
 
-  private async assignPlayer(user: string) {
+  private async playerJoin(user: string) {
     // 加入玩家队列
     this.players.push({
       id: user,
       slot: this.players.length,
       status: PlayerStatus.ALIVE,
+      left: false,
     });
 
     this.router.routeUser(user);
+
+    // 赋予玩家游戏角色
+    await this.run(() =>
+      this.bot.api.roleGrant({
+        guild_id: this.config.guildId,
+        user_id: user,
+        role_id: this.roleId,
+      }),
+    );
   }
 
-  private async removePlayer(user: string) {
+  private async playerLeave(user: string) {
     // 从游戏中移除
-    const index = this.players.findIndex((player) => player.id === user);
-    if (index === -1) return;
-    this.players.splice(index, 1);
+    this.players = this.players.filter((player) => player.id !== user);
     this.router.unrouteUser(user);
+
+    // 移除玩家游戏角色
+    await this.run(() =>
+      this.bot.api.roleRevoke({
+        guild_id: this.config.guildId,
+        user_id: user,
+        role_id: this.roleId,
+      }),
+    );
   }
 
   private async addSpectator(user: string) {
-    this.spectators.add(user);
+    this.activeUsers.add(user);
     this.router.routeUser(user);
 
     // TODO: mute user
   }
 
   private async removeSpectator(user: string) {
-    this.spectators.delete(user);
+    this.activeUsers.delete(user);
     this.router.unrouteUser(user);
 
     // TODO: unmute user
   }
 
+  /** 检查频道是否属于该游戏 */
+  isGameChannel(channel: string) {
+    return this.channels.includes(channel);
+  }
+
+  /** 已加入玩家加入游戏频道事件 */
+  async joinChannel(user: string) {
+    this.activeUsers.add(user);
+    const player = this.players.find((player) => player.id === user);
+    if (player) {
+      player.left = false;
+    }
+
+    if (user === this.storytellerId) {
+      await this.enterPrepareState();
+    }
+
+    console.log(this.activeUsers);
+  }
+
+  /** 已加入玩家离开游戏频道事件 */
+  async leaveChannel(user: string) {
+    this.activeUsers.delete(user);
+    const player = this.players.find((player) => player.id === user);
+    if (player) {
+      player.left = true;
+    }
+
+    if (this.status === GameStatus.PREPARING) {
+      // 准备阶段退出频道视为退出游戏
+      await this.playerLeave(user);
+    }
+
+    console.log(this.activeUsers);
+  }
+
   /**
-   * 玩家加入游戏
+   * 未加入游戏玩家加入游戏
    * @param user 正在加入的玩家
    */
   async joinGame(user: string) {
@@ -546,19 +603,11 @@ export class Game {
     if (user !== this.storytellerId) {
       if (this.status === GameStatus.PREPARING) {
         // 只有在准备阶段才会自动加入游戏玩家中
-        await this.assignPlayer(user);
+        await this.playerJoin(user);
       } else {
         // 其他阶段只加入到旁观者阵营（禁言)
         await this.addSpectator(user);
       }
-    }
-
-    switch (this.status) {
-      case GameStatus.WAITING_FOR_STORYTELLER:
-        // 如果是说书人加入，更新状态
-        if (user === this.storytellerId) {
-          await this.enterPrepareState();
-        }
     }
   }
 }
