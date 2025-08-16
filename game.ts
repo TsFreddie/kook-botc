@@ -46,8 +46,6 @@ interface Player {
   id: string;
   slot: number;
   status: PlayerStatus;
-  /** 玩家是否还在游戏中 */
-  left: boolean;
 }
 
 /** 游戏会话 */
@@ -440,20 +438,31 @@ export class Game {
         break;
     }
 
+    // Build button groups
+    const buttonGroups: ActionButton[][] = [
+      buttons as any,
+      [
+        { text: '状态', theme: 'primary', value: '[st]ListStatus' },
+        { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
+        { text: '换座', theme: 'info', value: '[st]ListSwap' },
+        { text: '禁言', theme: 'success', value: '[st]ListMute' },
+      ],
+    ];
+
+    // Only show restart button when restart is allowed (not in early states)
+    if (
+      this.status !== GameStatus.INITIALIZING &&
+      this.status !== GameStatus.WAITING_FOR_STORYTELLER
+    ) {
+      buttonGroups.push([{ text: '重新开始', theme: 'danger', value: '[st]GameRestart' }]);
+    }
+
     this.run(async () =>
       this.storytellerControl!.update({
         content: JSON.stringify({
           image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
           status: `**(font)${icon} 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
-          groups: [
-            buttons as any,
-            [
-              { text: '状态', theme: 'primary', value: '[st]ListStatus' },
-              { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
-              { text: '换座', theme: 'info', value: '[st]ListSwap' },
-              { text: '禁言', theme: 'success', value: '[st]ListMute' },
-            ],
-          ],
+          groups: buttonGroups as any,
         } satisfies StorytellerTemplateParams),
         template_id: this.config.templates.storyteller,
       }),
@@ -519,7 +528,14 @@ export class Game {
   }
 
   async storytellerGameStart() {
-    await this.withStorytellerLock(() => this.internalGameNight());
+    await this.withStorytellerLock(async () => {
+      await this.internalGameNight();
+
+      // ensure mute state for active players
+      for (const userId of this.activeUsers) {
+        await this.ensureCorrectMuteState(userId);
+      }
+    });
   }
 
   async storytellerGameDelete() {
@@ -640,6 +656,35 @@ export class Game {
     );
   }
 
+  private async internalGameRestart() {
+    // Don't allow reset when the state is before PREPARING
+    if (
+      this.status === GameStatus.INITIALIZING ||
+      this.status === GameStatus.WAITING_FOR_STORYTELLER
+    ) {
+      return;
+    }
+
+    // Reset game status to PREPARING
+    this.status = GameStatus.PREPARING;
+
+    // Remove any playing players that are not joined
+    this.players = this.players.filter((player) => this.isUserJoined(player.id));
+
+    // Reset all remaining players to ALIVE status
+    for (const player of this.players) {
+      player.status = PlayerStatus.ALIVE;
+    }
+
+    // Unmute all users (both players and spectators) since we're back to PREPARING state
+    for (const userId of this.activeUsers) {
+      await this.unmuteUser(userId);
+    }
+
+    // Update controls
+    await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
+  }
+
   // Public storyteller methods (with lock)
   async storytellerGameDay() {
     await this.withStorytellerLock(() => this.internalGameDay());
@@ -659,6 +704,10 @@ export class Game {
 
   async storytellerGameInviteOnly() {
     await this.withStorytellerLock(() => this.internalGameInviteOnly());
+  }
+
+  async storytellerGameRestart() {
+    await this.withStorytellerLock(() => this.internalGameRestart());
   }
 
   private async updateTownCard() {
@@ -708,10 +757,6 @@ export class Game {
   /** Set user as active (in voice channel) */
   private async setUserActive(user: string) {
     this.activeUsers.add(user);
-    // Ensure proper mute state: non-playing active users should be muted
-    if (user !== this.storytellerId && !this.isUserPlaying(user) && this.isUserJoined(user)) {
-      await this.muteUser(user);
-    }
   }
 
   /** Set user as inactive (not in voice channel) */
@@ -732,7 +777,6 @@ export class Game {
         id: user,
         slot: this.players.length,
         status: PlayerStatus.ALIVE,
-        left: !this.isUserActive(user), // Set left based on current active status
       });
     }
   }
@@ -830,8 +874,17 @@ export class Game {
         // Playing users should be unmuted
         await this.unmuteUser(user);
       } else {
-        // Non-playing users should be muted
-        await this.muteUser(user);
+        // Non-playing users should be muted only after PREPARING state
+        if (
+          this.status !== GameStatus.INITIALIZING &&
+          this.status !== GameStatus.WAITING_FOR_STORYTELLER &&
+          this.status !== GameStatus.PREPARING
+        ) {
+          await this.muteUser(user);
+        } else {
+          // Unmute spectators during early game phases
+          await this.unmuteUser(user);
+        }
       }
     }
   }
@@ -877,11 +930,6 @@ export class Game {
   async userEnteredVoiceChannel(user: string) {
     await this.setUserActive(user);
 
-    const player = this.players.find((player) => player.id === user);
-    if (player) {
-      player.left = false;
-    }
-
     // If user is not joined yet, join them
     if (!this.isUserJoined(user)) {
       await this.setUserJoined(user);
@@ -910,31 +958,20 @@ export class Game {
       }
     }
 
-    // Always mute non-playing users who are active (regardless of game phase)
-    if (user !== this.storytellerId && !this.isUserPlaying(user)) {
-      await this.muteUser(user);
-    }
+    // Ensure correct mute state based on game phase and playing status
+    await this.ensureCorrectMuteState(user);
 
     if (user === this.storytellerId) {
       await this.enterPrepareState();
     }
-
-    console.log('Active users:', this.activeUsers);
-    console.log(
-      'Playing users:',
-      this.players.map((p) => p.id),
-    );
-    console.log('Joined users:', this.joinedUsers);
   }
 
   /** 用户离开语音频道事件 */
   async userExitedVoiceChannel(user: string) {
     await this.setUserInactive(user);
 
-    const player = this.players.find((player) => player.id === user);
-    if (player) {
-      player.left = true;
-    }
+    // Always unmute user when they leave voice channel to make sure they don't stay muted
+    await this.unmuteUser(user);
 
     // 说书人不能退出自己的小镇
     if (user === this.storytellerId) return;
@@ -950,11 +987,6 @@ export class Game {
       // Only remove from joined if they were not already joined before this game
       if (this.isUserJoined(user)) {
         await this.setUserNotJoined(user);
-      }
-    } else {
-      // In other phases, just unmute them if they were spectators
-      if (!this.isUserPlaying(user)) {
-        await this.unmuteUser(user);
       }
     }
   }

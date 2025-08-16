@@ -168,7 +168,7 @@ const setupListeners = (config: GameConfig) => {
       const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
 
       // Don't call handlers if game is initializing
-      if (game && game.isInitializing()) {
+      if (!game || game.isInitializing()) {
         return;
       }
 
@@ -234,6 +234,8 @@ const setupListeners = (config: GameConfig) => {
 
     // 用户不在游戏内，加入游戏
     await game.joinGame(event.extra.body.user_id);
+    // 加入游戏后，用户应进入游戏
+    await game.userEnteredVoiceChannel(user);
   });
 
   bot.onExitedChannel(async (event) => {
