@@ -23,7 +23,7 @@ export class MessageQueue {
     this.messages = [];
   }
 
-  public push(message: MessageQueueCard) {
+  public update(message: MessageQueueCard) {
     return new Promise<void>((resolve, reject) => {
       this.messages.push({ message, resolve, reject });
 

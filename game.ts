@@ -394,7 +394,7 @@ export class Game {
     }
 
     this.run(async () =>
-      this.storytellerControl!.push({
+      this.storytellerControl!.update({
         content: JSON.stringify({
           image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
           status: `**(font)🌅 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
@@ -484,7 +484,7 @@ export class Game {
   private async updateTownCard() {
     if (!this.townCard || !this.invite) return;
 
-    await this.townCard.push({
+    await this.townCard.update({
       content: JSON.stringify(townCard(this.name, this.invite, this.isVoiceChannelOpen)),
     });
   }
