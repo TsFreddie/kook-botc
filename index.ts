@@ -166,7 +166,13 @@ const setupListeners = (config: GameConfig) => {
     if (value.startsWith('[st]')) {
       // 尝试执行说书人操作，只要能点到就允许操作
       const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
-      const handlerName = value.slice(4);
+
+      // Don't call handlers if game is initializing
+      if (game && game.isInitializing()) {
+        return;
+      }
+
+      const handlerName = 'storyteller' + value.slice(4); // Convert [st]gameStart to storytellerGameStart
 
       const handler = (game as any)[handlerName];
       if (handler && typeof handler === 'function') {
@@ -178,7 +184,13 @@ const setupListeners = (config: GameConfig) => {
     if (value.startsWith('[pl]')) {
       // 尝试执行玩家操作
       const game = MANAGER.getGameByChannelId(event.extra.body.target_id);
-      const handlerName = value.slice(4);
+
+      // Don't call handlers if game is initializing
+      if (game && game.isInitializing()) {
+        return;
+      }
+
+      const handlerName = 'player' + value.slice(4); // Convert [pl]GameLeave to playerGameLeave
       const userId = event.extra.body.user_id;
 
       const handler = (game as any)[handlerName];
@@ -205,8 +217,8 @@ const setupListeners = (config: GameConfig) => {
     const userGame = MANAGER.getGameByUserId(user);
     // 用户已经在游戏里了，暂时不需要处理任何事情
     if (userGame && userGame.isGameChannel(channel)) {
-      // 通知玩家加入游戏频道
-      await userGame.joinChannel(user);
+      // 通知玩家进入语音频道
+      await userGame.userEnteredVoiceChannel(user);
       return;
     }
 
@@ -230,7 +242,7 @@ const setupListeners = (config: GameConfig) => {
     const game = MANAGER.getGameByChannelId(channel);
     if (!game) return;
 
-    await game.leaveChannel(user);
+    await game.userExitedVoiceChannel(user);
   });
 };
 

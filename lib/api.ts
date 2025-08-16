@@ -1145,6 +1145,28 @@ export class KookApiClient {
   }
 
   /**
+   * Mute user in guild (server mute)
+   */
+  async guildMuteCreate(guildId: string, userId: string, type: 1 | 2): Promise<void> {
+    await this.makeRequest('/guild-mute/create', 'POST', {
+      guild_id: guildId,
+      user_id: userId,
+      type: type, // 1 = mic mute, 2 = headset mute
+    });
+  }
+
+  /**
+   * Unmute user in guild (remove server mute)
+   */
+  async guildMuteDelete(guildId: string, userId: string, type: 1 | 2): Promise<void> {
+    await this.makeRequest('/guild-mute/delete', 'POST', {
+      guild_id: guildId,
+      user_id: userId,
+      type: type, // 1 = mic mute, 2 = headset mute
+    });
+  }
+
+  /**
    * Get guild role list
    */
   async roleList(params: GetGuildRoleListParams): Promise<GuildRoleListResponse> {

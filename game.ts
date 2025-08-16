@@ -8,6 +8,7 @@ import type { ActionButton } from './templates/types.ts';
 import type { Router } from './manager.ts';
 import { townCard, townHeader } from './templates/town.ts';
 import { textCard } from './templates/text.ts';
+import { AsyncQueue } from './async-queue.ts';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -70,6 +71,12 @@ export class Game {
   private runCounter: number = 0;
   private destroyed: boolean = false;
   private cleanupCallback: (() => void) | null = null;
+
+  /** 说书人操作锁，防止并发执行 */
+  private storytellerLock: boolean = false;
+
+  /** 角色管理队列，防止 roleGrant/roleRevoke 竞态条件 */
+  private roleQueue: AsyncQueue;
   private run = async <T>(handler: () => Promise<T>) => {
     // 不再处理事件，直接等待销毁
     if (this.destroyed) return;
@@ -93,8 +100,11 @@ export class Game {
   /** 只记录正在游玩的玩家 */
   private players: Player[];
 
-  /** 活跃用户 */
+  /** 活跃用户 (在语音频道中) */
   private activeUsers: Set<string>;
+
+  /** 已加入游戏的用户 (拥有游戏角色) */
+  private joinedUsers: Set<string>;
 
   public townsquareChannelId?: string;
   public storytellerChannelId?: string;
@@ -115,6 +125,8 @@ export class Game {
     this.status = GameStatus.INITIALIZING;
     this.players = [];
     this.activeUsers = new Set();
+    this.joinedUsers = new Set();
+    this.roleQueue = new AsyncQueue();
     this.name = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
@@ -168,13 +180,16 @@ export class Game {
       ]);
 
       await Promise.all([
-        // 赋予说书人游戏角色
+        // 赋予说书人游戏角色并标记为已加入
         (async () => {
           await this.bot.api.roleGrant({
             guild_id: this.config.guildId,
             user_id: this.storytellerId,
             role_id: this.roleId,
           });
+          // Mark storyteller as joined
+          this.joinedUsers.add(this.storytellerId);
+          this.router.routeUser(this.storytellerId);
         })(),
 
         // 赋予分组权限
@@ -278,9 +293,6 @@ export class Game {
       );
 
       this.status = GameStatus.WAITING_FOR_STORYTELLER;
-
-      if (!this.storytellerId) throw new Error('创建游戏失败: 说书人ID无效');
-      this.router.routeUser(this.storytellerId);
     });
 
     return;
@@ -334,7 +346,14 @@ export class Game {
 
     const routine = async () => {
       // 注销说书人
+      this.joinedUsers.delete(this.storytellerId);
       this.router.unrouteUser(this.storytellerId);
+
+      // 注销所有其他用户
+      for (const userId of this.joinedUsers) {
+        this.router.unrouteUser(userId);
+      }
+      this.joinedUsers.clear();
 
       // 注销频道
       for (const channel of this.channels) {
@@ -346,7 +365,7 @@ export class Game {
         this.channels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
       );
 
-      // 删除角色
+      // 删除角色 (this will automatically revoke the role from all users)
       if (this.roleId !== -1) {
         await this.bot.api.roleDelete({
           guild_id: this.config.guildId,
@@ -387,8 +406,8 @@ export class Game {
         status =
           '小镇已就绪，在此发送的内容将转发给所有玩家\n(font)建议利用现在这个时机向玩家发送剧本和需要解释的规则等(font)[warning]';
         buttons = [
-          { text: '⭐ 开始游戏', theme: 'info', value: '[st]gameStart' },
-          { text: '踢出玩家', theme: 'info', value: '[st]listKick' },
+          { text: '⭐ 开始游戏', theme: 'info', value: '[st]GameStart' },
+          { text: '踢出玩家', theme: 'info', value: '[st]ListKick' },
         ];
         break;
       case GameStatus.NIGHT:
@@ -396,17 +415,17 @@ export class Game {
         status =
           '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)使用托梦功能为镇民提供信息，亦可前往小屋与镇民语音(font)[warning]';
         buttons = [
-          { text: '🌅 黎明初生', theme: 'info', value: '[st]gameDay' },
-          { text: '前往小屋', theme: 'success', value: '[st]listGoto' },
+          { text: '🌅 黎明初生', theme: 'info', value: '[st]GameDay' },
+          { text: '前往小屋', theme: 'success', value: '[st]ListGoto' },
         ];
         break;
       case GameStatus.DAY:
         mode = `白天阶段 - 广场集会`;
         status = '镇民聚集在广场中\n(font)使用发起投票功能可发起提名(font)[warning]';
         buttons = [
-          { text: '🌄 夜幕降临', theme: 'info', value: '[st]gameNight' },
-          { text: '自由活动', theme: 'primary', value: '[st]gameRoam' },
-          { text: '发起投票', theme: 'warning', value: '[st]listVote' },
+          { text: '🌄 夜幕降临', theme: 'info', value: '[st]GameNight' },
+          { text: '自由活动', theme: 'primary', value: '[st]GameRoam' },
+          { text: '发起投票', theme: 'warning', value: '[st]ListVote' },
         ];
         break;
       case GameStatus.ROAMING:
@@ -414,9 +433,9 @@ export class Game {
         status =
           '现在是自由活动时间\n(font)你和镇民一样可以前往各地，同时你还可以前往玩家小屋(font)[warning]';
         buttons = [
-          { text: '🌄 夜幕降临', theme: 'info', value: '[st]gameNight' },
-          { text: '广场集会', theme: 'warning', value: '[st]gameDay' },
-          { text: '前往小屋', theme: 'success', value: '[st]listGoto' },
+          { text: '🌄 夜幕降临', theme: 'info', value: '[st]GameNight' },
+          { text: '广场集会', theme: 'warning', value: '[st]GameDay' },
+          { text: '前往小屋', theme: 'success', value: '[st]ListGoto' },
         ];
         break;
     }
@@ -429,10 +448,10 @@ export class Game {
           groups: [
             buttons as any,
             [
-              { text: '状态', theme: 'primary', value: '[st]listStatus' },
-              { text: '托梦', theme: 'warning', value: '[st]listPrivate' },
-              { text: '换座', theme: 'info', value: '[st]listSwap' },
-              { text: '禁言', theme: 'success', value: '[st]listMute' },
+              { text: '状态', theme: 'primary', value: '[st]ListStatus' },
+              { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
+              { text: '换座', theme: 'info', value: '[st]ListSwap' },
+              { text: '禁言', theme: 'success', value: '[st]ListMute' },
             ],
           ],
         } satisfies StorytellerTemplateParams),
@@ -483,40 +502,107 @@ export class Game {
     );
   }
 
-  async gameStart() {
-    await this.gameNight();
+  /**
+   * Storyteller handler wrapper with lock protection
+   */
+  private async withStorytellerLock<T>(handler: () => Promise<T>): Promise<T | void> {
+    if (this.storytellerLock) {
+      return; // Do nothing if lock is held
+    }
+
+    this.storytellerLock = true;
+    try {
+      return await handler();
+    } finally {
+      this.storytellerLock = false;
+    }
   }
 
-  async gameDelete() {
-    await this.cleanup();
+  async storytellerGameStart() {
+    await this.withStorytellerLock(() => this.internalGameNight());
   }
 
-  async gameLeave(userId: string) {
+  async storytellerGameDelete() {
+    await this.cleanup(); // No lock needed since cleanup uses this.run
+  }
+
+  // Placeholder methods for other storyteller actions
+  async storytellerListKick() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement kick player functionality
+      console.log('storytellerListKick called');
+    });
+  }
+
+  async storytellerListGoto() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement goto cottage functionality
+      console.log('storytellerListGoto called');
+    });
+  }
+
+  async storytellerListVote() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement voting functionality
+      console.log('storytellerListVote called');
+    });
+  }
+
+  async storytellerListStatus() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement status display functionality
+      console.log('storytellerListStatus called');
+    });
+  }
+
+  async storytellerListPrivate() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement private message functionality
+      console.log('storytellerListPrivate called');
+    });
+  }
+
+  async storytellerListSwap() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement seat swap functionality
+      console.log('storytellerListSwap called');
+    });
+  }
+
+  async storytellerListMute() {
+    await this.withStorytellerLock(async () => {
+      // TODO: Implement mute functionality
+      console.log('storytellerListMute called');
+    });
+  }
+
+  /**
+   * Player action: Leave the game
+   */
+  async playerGameLeave(userId: string) {
     await this.playerLeave(userId);
   }
 
-  async gameDay() {
+  // Internal implementations (no lock)
+  private async internalGameDay() {
     this.status = GameStatus.DAY;
-
     // TODO: move people into the town square
     await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
-  async gameNight() {
+  private async internalGameNight() {
     this.status = GameStatus.NIGHT;
-
     // TODO: move people into their cottages
     await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
-  async gameRoam() {
+  private async internalGameRoam() {
     this.status = GameStatus.ROAMING;
-
     // TODO: notify game status changes
     await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
-  async gameOpen() {
+  private async internalGameOpen() {
     if (!this.voiceChannelId) return;
 
     this.isVoiceChannelOpen = true;
@@ -535,7 +621,7 @@ export class Game {
     );
   }
 
-  async gameInviteOnly() {
+  private async internalGameInviteOnly() {
     if (!this.voiceChannelId) return;
 
     this.isVoiceChannelOpen = false;
@@ -554,6 +640,27 @@ export class Game {
     );
   }
 
+  // Public storyteller methods (with lock)
+  async storytellerGameDay() {
+    await this.withStorytellerLock(() => this.internalGameDay());
+  }
+
+  async storytellerGameNight() {
+    await this.withStorytellerLock(() => this.internalGameNight());
+  }
+
+  async storytellerGameRoam() {
+    await this.withStorytellerLock(() => this.internalGameRoam());
+  }
+
+  async storytellerGameOpen() {
+    await this.withStorytellerLock(() => this.internalGameOpen());
+  }
+
+  async storytellerGameInviteOnly() {
+    await this.withStorytellerLock(() => this.internalGameInviteOnly());
+  }
+
   private async updateTownCard() {
     if (!this.townCard || !this.invite) return;
 
@@ -567,67 +674,198 @@ export class Game {
     await Promise.all([this.updateStoryTellerControl(), this.updateTownsquareControl()]);
   }
 
-  private async playerJoin(user: string) {
-    // 加入玩家队列
-    this.players.push({
-      id: user,
-      slot: this.players.length,
-      status: PlayerStatus.ALIVE,
-      left: false,
-    });
-
-    this.router.routeUser(user);
-
-    // 赋予玩家游戏角色
-    await this.run(() =>
-      this.bot.api.roleGrant({
-        guild_id: this.config.guildId,
-        user_id: user,
-        role_id: this.roleId,
-      }),
-    );
-
-    // 发送消息提醒玩家
-    await this.run(() =>
-      this.bot.api.messageCreate({
-        target_id: this.voiceChannelId!,
-        type: ApiMessageType.CARD,
-        content: JSON.stringify(
-          textCard(
-            `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
-          ),
-        ),
-      }),
-    );
-  }
-
   private async playerLeave(user: string) {
-    // 从游戏中移除
-    this.players = this.players.filter((player) => player.id !== user);
-    this.router.unrouteUser(user);
+    // Always set user as not joined (remove role)
+    if (this.isUserJoined(user)) {
+      await this.setUserNotJoined(user);
+    }
 
-    // 移除玩家游戏角色
-    await this.run(() =>
-      this.bot.api.roleRevoke({
-        guild_id: this.config.guildId,
-        user_id: user,
-        role_id: this.roleId,
-      }),
+    // If currently in preparing status or earlier, also make them not playing
+    if (
+      this.status === GameStatus.PREPARING ||
+      this.status === GameStatus.WAITING_FOR_STORYTELLER ||
+      this.status === GameStatus.INITIALIZING
+    ) {
+      if (this.isUserPlaying(user)) {
+        await this.setUserNotPlaying(user);
+      }
+    }
+
+    // Note: We don't handle active state since they will automatically
+    // quit the voice channel once the role is removed
+
+    // Unmute user in case they were muted
+    await this.unmuteUser(user);
+  }
+
+  /**
+   * State Management Methods
+   * Active: user is in voice channel
+   * Playing: user is in player list
+   * Joined: user has game role and is routed to this game
+   */
+
+  /** Set user as active (in voice channel) */
+  private async setUserActive(user: string) {
+    this.activeUsers.add(user);
+    // Ensure proper mute state: non-playing active users should be muted
+    if (user !== this.storytellerId && !this.isUserPlaying(user) && this.isUserJoined(user)) {
+      await this.muteUser(user);
+    }
+  }
+
+  /** Set user as inactive (not in voice channel) */
+  private async setUserInactive(user: string) {
+    this.activeUsers.delete(user);
+  }
+
+  /** Set user as playing (in player list) */
+  private async setUserPlaying(user: string) {
+    // Storyteller cannot be playing
+    if (user === this.storytellerId) {
+      return;
+    }
+
+    // Add to players array if not already there
+    if (!this.players.find((p) => p.id === user)) {
+      this.players.push({
+        id: user,
+        slot: this.players.length,
+        status: PlayerStatus.ALIVE,
+        left: !this.isUserActive(user), // Set left based on current active status
+      });
+    }
+  }
+
+  /** Set user as not playing (remove from player list) */
+  private async setUserNotPlaying(user: string) {
+    // Storyteller cannot be playing, so no need to remove
+    if (user === this.storytellerId) {
+      return;
+    }
+
+    // Remove from players array
+    this.players = this.players.filter((player) => player.id !== user);
+  }
+
+  /** Set user as joined (has game role and is routed) */
+  private async setUserJoined(user: string) {
+    this.joinedUsers.add(user);
+    this.router.routeUser(user);
+
+    // Grant game role using queue to prevent race conditions
+    await this.roleQueue.push(() =>
+      this.run(() =>
+        this.bot.api.roleGrant({
+          guild_id: this.config.guildId,
+          user_id: user,
+          role_id: this.roleId,
+        }),
+      ),
     );
   }
 
-  private async addSpectator(user: string) {
-    this.activeUsers.add(user);
-    this.router.routeUser(user);
+  /** Set user as not joined (remove game role and unroute) */
+  private async setUserNotJoined(user: string) {
+    // Storyteller is always joined until cleanup
+    if (user === this.storytellerId) {
+      return;
+    }
 
-    // TODO: mute user
-  }
-
-  private async removeSpectator(user: string) {
-    this.activeUsers.delete(user);
+    this.joinedUsers.delete(user);
     this.router.unrouteUser(user);
 
-    // TODO: unmute user
+    // Revoke game role using queue to prevent race conditions
+    await this.roleQueue.push(() =>
+      this.run(() =>
+        this.bot.api.roleRevoke({
+          guild_id: this.config.guildId,
+          user_id: user,
+          role_id: this.roleId,
+        }),
+      ),
+    );
+  }
+
+  /** Mute user (for spectators) */
+  private async muteUser(user: string) {
+    await this.run(
+      () => this.bot.api.guildMuteCreate(this.config.guildId, user, 1), // 1 = mic mute
+    );
+  }
+
+  /** Unmute user */
+  private async unmuteUser(user: string) {
+    await this.run(
+      () => this.bot.api.guildMuteDelete(this.config.guildId, user, 1), // 1 = mic mute
+    );
+  }
+
+  /** Check if user is active (in voice channel) */
+  isUserActive(user: string): boolean {
+    return this.activeUsers.has(user);
+  }
+
+  /** Check if user is playing (in player list) */
+  isUserPlaying(user: string): boolean {
+    return this.players.some((player) => player.id === user);
+  }
+
+  /** Check if user is joined (has game role) */
+  isUserJoined(user: string): boolean {
+    return this.joinedUsers.has(user);
+  }
+
+  /** Check if game is currently initializing */
+  isInitializing(): boolean {
+    return this.status === GameStatus.INITIALIZING;
+  }
+
+  /** Ensure user has correct mute state based on their playing status */
+  private async ensureCorrectMuteState(user: string) {
+    if (user === this.storytellerId) return; // Storyteller is never muted
+
+    if (this.isUserActive(user) && this.isUserJoined(user)) {
+      if (this.isUserPlaying(user)) {
+        // Playing users should be unmuted
+        await this.unmuteUser(user);
+      } else {
+        // Non-playing users should be muted
+        await this.muteUser(user);
+      }
+    }
+  }
+
+  /**
+   * Public methods for manually managing playing state
+   */
+
+  /** Manually set a user as playing */
+  async markUserPlaying(user: string) {
+    // Storyteller cannot be playing
+    if (user === this.storytellerId) {
+      return;
+    }
+
+    if (!this.isUserPlaying(user)) {
+      await this.setUserPlaying(user);
+      // Ensure correct mute state
+      await this.ensureCorrectMuteState(user);
+    }
+  }
+
+  /** Manually set a user as not playing */
+  async markUserNotPlaying(user: string) {
+    // Storyteller cannot be playing, so no need to remove
+    if (user === this.storytellerId) {
+      return;
+    }
+
+    if (this.isUserPlaying(user)) {
+      await this.setUserNotPlaying(user);
+      // Ensure correct mute state
+      await this.ensureCorrectMuteState(user);
+    }
   }
 
   /** 检查频道是否属于该游戏 */
@@ -635,24 +873,64 @@ export class Game {
     return this.channels.includes(channel);
   }
 
-  /** 已加入玩家加入游戏频道事件 */
-  async joinChannel(user: string) {
-    this.activeUsers.add(user);
+  /** 用户进入语音频道事件 */
+  async userEnteredVoiceChannel(user: string) {
+    await this.setUserActive(user);
+
     const player = this.players.find((player) => player.id === user);
     if (player) {
       player.left = false;
+    }
+
+    // If user is not joined yet, join them
+    if (!this.isUserJoined(user)) {
+      await this.setUserJoined(user);
+    }
+
+    // In PREPARING or WAITING_FOR_STORYTELLER, automatically set as playing
+    if (
+      (this.status === GameStatus.PREPARING ||
+        this.status === GameStatus.WAITING_FOR_STORYTELLER) &&
+      user !== this.storytellerId
+    ) {
+      if (!this.isUserPlaying(user)) {
+        await this.setUserPlaying(user);
+        // Send welcome message
+        await this.run(() =>
+          this.bot.api.messageCreate({
+            target_id: this.voiceChannelId!,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify(
+              textCard(
+                `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
+              ),
+            ),
+          }),
+        );
+      }
+    }
+
+    // Always mute non-playing users who are active (regardless of game phase)
+    if (user !== this.storytellerId && !this.isUserPlaying(user)) {
+      await this.muteUser(user);
     }
 
     if (user === this.storytellerId) {
       await this.enterPrepareState();
     }
 
-    console.log(this.activeUsers);
+    console.log('Active users:', this.activeUsers);
+    console.log(
+      'Playing users:',
+      this.players.map((p) => p.id),
+    );
+    console.log('Joined users:', this.joinedUsers);
   }
 
-  /** 已加入玩家离开游戏频道事件 */
-  async leaveChannel(user: string) {
-    this.activeUsers.delete(user);
+  /** 用户离开语音频道事件 */
+  async userExitedVoiceChannel(user: string) {
+    await this.setUserInactive(user);
+
     const player = this.players.find((player) => player.id === user);
     if (player) {
       player.left = true;
@@ -666,7 +944,18 @@ export class Game {
       this.status === GameStatus.WAITING_FOR_STORYTELLER
     ) {
       // 准备阶段退出频道视为退出游戏
-      await this.playerLeave(user);
+      if (this.isUserPlaying(user)) {
+        await this.setUserNotPlaying(user);
+      }
+      // Only remove from joined if they were not already joined before this game
+      if (this.isUserJoined(user)) {
+        await this.setUserNotJoined(user);
+      }
+    } else {
+      // In other phases, just unmute them if they were spectators
+      if (!this.isUserPlaying(user)) {
+        await this.unmuteUser(user);
+      }
     }
   }
 
@@ -677,15 +966,36 @@ export class Game {
   async joinGame(user: string) {
     // 说书人不需要加入游戏
     if (user !== this.storytellerId) {
+      // Always join them to the game (give role and route)
+      if (!this.isUserJoined(user)) {
+        await this.setUserJoined(user);
+      }
+
       if (
         this.status === GameStatus.PREPARING ||
         this.status === GameStatus.WAITING_FOR_STORYTELLER
       ) {
         // 只有在准备阶段才会自动加入游戏玩家中
-        await this.playerJoin(user);
+        if (!this.isUserPlaying(user)) {
+          await this.setUserPlaying(user);
+          // Send welcome message
+          await this.run(() =>
+            this.bot.api.messageCreate({
+              target_id: this.voiceChannelId!,
+              type: ApiMessageType.CARD,
+              content: JSON.stringify(
+                textCard(
+                  `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
+                ),
+              ),
+            }),
+          );
+        }
       } else {
         // 其他阶段只加入到旁观者阵营（禁言)
-        await this.addSpectator(user);
+        if (!this.isUserPlaying(user)) {
+          await this.muteUser(user);
+        }
       }
     }
   }
