@@ -29,6 +29,18 @@ export enum VoiceQuality {
 }
 
 /**
+ * Button themes
+ */
+export type ButtonTheme =
+  | 'primary'
+  | 'success'
+  | 'danger'
+  | 'warning'
+  | 'info'
+  | 'secondary'
+  | 'none';
+
+/**
  * Permission flags for guild roles
  * Each permission is represented by a bit position (0-30)
  * To check if a permission is granted: (permissions & (1 << PermissionFlag.ADMIN)) === (1 << PermissionFlag.ADMIN)
@@ -824,6 +836,113 @@ export interface InviteCreateResponse {
 }
 
 /**
+ * Template message types
+ */
+export enum TemplateMessageType {
+  KMD = 1, // KMarkdown message
+  CARD_JSON = 2, // Card message via JSON
+  CARD_YAML = 3, // Card message via YAML
+}
+
+/**
+ * Template status
+ */
+export enum TemplateStatus {
+  NOT_REVIEWED = 0, // 未审核
+  REVIEWING = 1, // 审核中
+  APPROVED = 2, // 审核通过
+  REJECTED = 3, // 审核拒绝
+}
+
+/**
+ * Template type
+ */
+export enum TemplateType {
+  TWIG = 0, // Twig template engine
+}
+
+/**
+ * Template information
+ */
+export interface Template {
+  id: string;
+  title: string;
+  type: TemplateType;
+  msgtype: TemplateMessageType;
+  status: TemplateStatus;
+  test_data: string;
+  test_channel: string;
+  content: string;
+}
+
+/**
+ * Template list response with pagination
+ */
+export interface TemplateListResponse {
+  items: Template[];
+  meta: {
+    page: number;
+    page_total: number;
+    page_size: number;
+    total: number;
+  };
+  sort: any[];
+}
+
+/**
+ * Parameters for creating a template
+ */
+export interface CreateTemplateParams {
+  title: string;
+  content: string;
+  test_data?: string;
+  msgtype?: TemplateMessageType;
+  type?: TemplateType;
+  test_channel?: string;
+}
+
+/**
+ * Parameters for updating a template
+ */
+export interface UpdateTemplateParams {
+  id: string;
+  title?: string;
+  content?: string;
+  test_data?: string;
+  msgtype?: TemplateMessageType;
+  type?: TemplateType;
+  test_channel?: string;
+}
+
+/**
+ * Parameters for deleting a template
+ */
+export interface DeleteTemplateParams {
+  id: string;
+}
+
+/**
+ * Template creation/update response
+ */
+export interface TemplateOperationResponse {
+  model: Template;
+}
+
+/**
+ * Asset upload response
+ */
+export interface AssetUploadResponse {
+  url: string;
+}
+
+/**
+ * Parameters for uploading an asset
+ */
+export interface UploadAssetParams {
+  file: File | Blob;
+}
+
+/**
  * KOOK HTTP API Client
  */
 export class KookApiClient {
@@ -878,6 +997,56 @@ export class KookApiClient {
         method,
         headers,
         body,
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+      }
+
+      const data = (await response.json()) as KookApiResponse<T>;
+
+      if (data.code !== 0) {
+        throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
+      }
+
+      if (this.debug) {
+        console.log(`[API] Response:`, data);
+        console.log(`[API] Headers:`, response.headers);
+      }
+
+      return data;
+    } catch (error) {
+      if (this.debug) {
+        console.error(`[API] Request failed:`, error);
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Make HTTP request with form-data to KOOK API
+   */
+  private async makeFormDataRequest<T>(
+    endpoint: string,
+    formData: FormData,
+  ): Promise<KookApiResponse<T>> {
+    const url = `${this.baseUrl}${endpoint}`;
+
+    const headers: Record<string, string> = {
+      Authorization: `Bot ${this.token}`,
+      // Don't set Content-Type for FormData, let the browser set it with boundary
+    };
+
+    if (this.debug) {
+      console.log(`[API] POST ${url.replace(this.token, '***')}`);
+      console.log(`[API] FormData:`, Array.from(formData.entries()));
+    }
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers,
+        body: formData,
       });
 
       if (!response.ok) {
@@ -1223,5 +1392,56 @@ export class KookApiClient {
    */
   async inviteDelete(params: DeleteInviteParams): Promise<void> {
     await this.makeRequest('/invite/delete', 'POST', params);
+  }
+
+  /**
+   * Get template list
+   */
+  async templateList(): Promise<TemplateListResponse> {
+    const response = await this.makeRequest<TemplateListResponse>('/template/list', 'GET');
+    return response.data;
+  }
+
+  /**
+   * Create a new template
+   */
+  async templateCreate(params: CreateTemplateParams): Promise<TemplateOperationResponse> {
+    const response = await this.makeRequest<TemplateOperationResponse>(
+      '/template/create',
+      'POST',
+      params,
+    );
+    return response.data;
+  }
+
+  /**
+   * Update an existing template
+   */
+  async templateUpdate(params: UpdateTemplateParams): Promise<TemplateOperationResponse> {
+    const response = await this.makeRequest<TemplateOperationResponse>(
+      '/template/update',
+      'POST',
+      params,
+    );
+    return response.data;
+  }
+
+  /**
+   * Delete a template
+   */
+  async templateDelete(params: DeleteTemplateParams): Promise<void> {
+    await this.makeRequest('/template/delete', 'POST', params);
+  }
+
+  /**
+   * Upload an asset (image, video, file)
+   * Supports images, videos (.mp4, .mov), and files
+   */
+  async assetCreate(params: UploadAssetParams): Promise<AssetUploadResponse> {
+    const formData = new FormData();
+    formData.append('file', params.file);
+
+    const response = await this.makeFormDataRequest<AssetUploadResponse>('/asset/create', formData);
+    return response.data;
   }
 }

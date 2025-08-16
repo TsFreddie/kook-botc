@@ -5,13 +5,6 @@
     "size": "lg",
     "modules": [
       {
-        "type": "section",
-        "text": {
-          "type": "kmarkdown",
-          "content": "邀请连接：[{{ data.invite }}]({{ data.invite }})"
-        }
-      },
-      {
         "type": "container",
         "elements": [
           {
@@ -24,7 +17,7 @@
         "type": "section",
         "text": {
           "type": "kmarkdown",
-          "content": "> (font)游戏过程中请始终查看该频道，否则可能会错过重要消息(font)[secondary]\n> (font)若不小心退出了语音，可以使用邀请连接重新进入城镇广场语音(font)[secondary]\n\n\n{{ data.header|json_escape }}"
+          "content": "> (font)游戏过程中请始终查看该频道，否则可能会错过重要消息(font)[secondary]\n> (font)若不小心退出了语音，可以点(font)[secondary][这里]({{ data.invite }})(font)重新进入城镇广场语音(font)[secondary]\n\n\n{{ data.header|json_escape }}"
         }
       },
       {
@@ -37,28 +30,6 @@
       {
         "type": "divider"
       }
-{% if data.buttons and data.buttons|length > 0 %}
-    {% for button in data.buttons %}
-      ,{
-        "type": "section",
-        "text": {
-          "type": "plain-text",
-          "content": "{{ button.desc|json_escape }}"
-        },
-        "mode": "right",
-        "accessory": {
-          "type": "button",
-          "theme": "{{ button.theme }}",
-          "text": {
-            "type": "plain-text",
-            "content": "{{ button.text }}"
-          },
-          "click": "return-val",
-          "value": "{{ button.value }}"
-        }
-      }
-    {% endfor %}
-{% endif %}
 {% if data.groups and data.groups|length > 0 %}
     {% for group in data.groups %}
       ,{
@@ -80,6 +51,28 @@
           }
         {% endfor %}
         ]
+      }
+    {% endfor %}
+{% endif %}
+{% if data.buttons and data.buttons|length > 0 %}
+    {% for button in data.buttons %}
+      ,{
+        "type": "section",
+        "text": {
+          "type": "plain-text",
+          "content": "{{ button.desc|json_escape }}"
+        },
+        "mode": "right",
+        "accessory": {
+          "type": "button",
+          "theme": "{{ button.theme }}",
+          "text": {
+            "type": "plain-text",
+            "content": "{{ button.text }}"
+          },
+          "click": "return-val",
+          "value": "{{ button.value }}"
+        }
       }
     {% endfor %}
 {% endif %}

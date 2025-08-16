@@ -1,8 +1,10 @@
 import type { KookClient } from './lib/kook';
 import type { GameConfig } from './types';
 import { ApiChannelType, ApiMessageType, Permission, VoiceQuality } from './lib/api.ts';
-import { inviteCard } from './templates/invite.ts';
-import type { User } from './lib/events.ts';
+import { MessageQueue } from './msg-queue.ts';
+import type { StorytellerTemplateParams } from './templates/storyteller.ts';
+import type { ActionButton } from './templates/types.ts';
+import type { Router } from './manager.ts';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -26,21 +28,68 @@ export enum GameStatus {
   /** 白天阶段 */
   DAY,
 
-  /** 提名阶段 */
-  NOMINATION,
+  /** 自由活动 */
+  ROAMING,
 }
 
-const run = (handler: () => Promise<any>) => handler();
+export enum PlayerStatus {
+  ALIVE = 0,
+  DEAD,
+  DEAD_VOTED,
+}
+
+interface Player {
+  id: string;
+  slot: number;
+  status: PlayerStatus;
+}
 
 /** 游戏会话 */
 export class Game {
   private storytellerId: string;
-  private channels: string[];
+  private textChannels: string[];
+  private voiceChannels: string[];
   private bot: KookClient;
   private config: GameConfig;
 
   private roleId: number;
   private categoryId?: string;
+
+  private storytellerControl?: MessageQueue;
+  private storytellerPlayerList?: MessageQueue;
+
+  private townsquareControl?: MessageQueue;
+  private townsquarePlayerList?: MessageQueue;
+
+  /** 请求计数，只有所有请求都处理完才会进行销毁 */
+  private runCounter: number = 0;
+  private destroyed: boolean = false;
+  private cleanupCallback: (() => void) | null = null;
+  private run = async <T>(handler: () => Promise<T>) => {
+    // 不再处理事件，直接等待销毁
+    if (this.destroyed) return;
+
+    this.runCounter++;
+    try {
+      return await handler();
+    } catch (err) {
+      throw err;
+    } finally {
+      this.runCounter--;
+      if (this.runCounter === 0 && this.cleanupCallback) {
+        this.cleanupCallback();
+        this.cleanupCallback = null;
+      }
+    }
+  };
+
+  private router: Router;
+
+  /** 只记录正在游玩的玩家 */
+  private players: Player[];
+
+  /** 旁观者 ID */
+  private spectators: Set<string>;
 
   public townsquareChannelId?: string;
   public storytellerChannelId?: string;
@@ -50,211 +99,399 @@ export class Game {
 
   public name: string;
 
-  constructor(storytellerId: string, bot: KookClient, config: GameConfig) {
+  constructor(storytellerId: string, bot: KookClient, config: GameConfig, router: Router) {
     this.storytellerId = storytellerId;
-    this.channels = [];
+    this.textChannels = [];
+    this.voiceChannels = [];
     this.bot = bot;
     this.config = config;
+    this.router = router;
     this.roleId = -1;
     this.status = GameStatus.INITIALIZING;
+    this.players = [];
+    this.spectators = new Set();
     this.name = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
   }
 
   async init() {
-    await Promise.all([
-      // 赋予说书人角色
-      run(async () => {
-        await this.bot.api.roleGrant({
-          guild_id: this.config.guildId,
-          user_id: this.storytellerId,
-          role_id: this.config.storytellerRoleId,
-        });
-      }),
-
-      // 创建游戏所需角色
-      run(async () => {
-        this.roleId = (
-          await this.bot.api.roleCreate({
+    await this.run(async () => {
+      await Promise.all([
+        // 赋予说书人角色
+        this.run(async () => {
+          await this.bot.api.roleGrant({
             guild_id: this.config.guildId,
-            name: this.name,
-          })
-        ).role_id;
-      }),
+            user_id: this.storytellerId,
+            role_id: this.config.storytellerRoleId,
+          });
+        }),
 
-      // 创建频道分组
-      run(async () => {
-        this.categoryId = (
-          await this.bot.api.channelCreate({
+        // 创建游戏所需角色
+        this.run(async () => {
+          this.roleId = (
+            await this.bot.api.roleCreate({
+              guild_id: this.config.guildId,
+              name: this.name,
+            })
+          ).role_id;
+        }),
+
+        // 创建频道分组
+        this.run(async () => {
+          this.categoryId = (
+            await this.bot.api.channelCreate({
+              guild_id: this.config.guildId,
+              name: `鸦木布拉夫`,
+              is_category: 1,
+            })
+          ).id;
+
+          await this.bot.api.channelRoleUpdate({
+            channel_id: this.categoryId,
+            type: 'role_id',
+            value: '0',
+            deny: Permission.VIEW_CHANNELS,
+          });
+
+          // 将小镇排序置顶
+          await this.bot.api.channelUpdate({ channel_id: this.categoryId, level: 0 });
+
+          this.textChannels.push(this.categoryId);
+        }),
+      ]);
+
+      await Promise.all([
+        // 赋予说书人游戏角色
+        this.run(async () => {
+          await this.bot.api.roleGrant({
             guild_id: this.config.guildId,
-            name: `鸦木布拉夫`,
-            is_category: 1,
+            user_id: this.storytellerId,
+            role_id: this.roleId,
+          });
+        }),
+
+        // 赋予分组权限
+        this.run(async () => {
+          if (!this.categoryId) throw new Error('创建游戏失败: 分组ID无效');
+          await this.bot.api.channelRoleUpdate({
+            channel_id: this.categoryId,
+            type: 'role_id',
+            value: this.roleId.toString(),
+            allow: Permission.VIEW_CHANNELS,
+          });
+        }),
+
+        // 创建玩家频道
+        this.run(async () => {
+          this.townsquareChannelId = (
+            await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
+          )?.id;
+        }),
+
+        // 创建说书人频道
+        this.run(async () => {
+          this.storytellerChannelId = (
+            await this.createTextChannel('🏢 城镇广场 (说书人)', ChannelMode.Storyteller)
+          )?.id;
+        }),
+
+        // 创建语音房间频道和邀请连接
+        this.run(async () => {
+          this.voiceChannelId = (
+            await this.bot.api.channelCreate({
+              guild_id: this.config.guildId,
+              name: `‣ ${this.name}`,
+              type: ApiChannelType.VOICE,
+              voice_quality: VoiceQuality.HIGH,
+              limit_amount: 20,
+              parent_id: this.config.roomCategoryId,
+            })
+          ).id;
+
+          this.voiceChannels.push(this.voiceChannelId);
+          this.router.routeChannel(this.voiceChannelId);
+
+          // 创建邀请连接
+          this.invite = (
+            await this.bot.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })
+          ).url;
+        }),
+      ]);
+
+      if (!this.storytellerChannelId) throw new Error('创建游戏失败: 说书人频道ID无效');
+      if (!this.invite) throw new Error('创建游戏失败: 邀请连接无效');
+
+      // 初始化说书人频道
+      this.storytellerControl = new MessageQueue(
+        this.bot,
+        (
+          await this.bot.api.messageCreate({
+            target_id: this.storytellerChannelId,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify({
+              image: this.config.assets['day']!,
+              invite: this.invite!,
+              header: '**(font)🌅 城镇广场(font)[warning]**',
+              status: `(font)已创建${this.name}(font)[success]，请说书人使用[邀请链接](${this.invite})加入语音\n(font)加入后请回到这个频道进行后续操作(font)[warning]`,
+            } satisfies StorytellerTemplateParams),
+            template_id: this.config.templates.storyteller,
           })
-        ).id;
+        ).msg_id,
+      );
 
-        await this.bot.api.channelRoleUpdate({
-          channel_id: this.categoryId,
-          type: 'role_id',
-          value: '0',
-          deny: Permission.VIEW_CHANNELS,
-        });
+      this.status = GameStatus.WAITING_FOR_STORYTELLER;
 
-        // 将小镇排序置顶
-        await this.bot.api.channelUpdate({ channel_id: this.categoryId, level: 0 });
-
-        this.channels.push(this.categoryId);
-      }),
-    ]);
-
-    await Promise.all([
-      // 赋予说书人游戏角色
-      run(async () => {
-        await this.bot.api.roleGrant({
-          guild_id: this.config.guildId,
-          user_id: this.storytellerId,
-          role_id: this.roleId,
-        });
-      }),
-
-      // 赋予分组权限
-      run(async () => {
-        if (!this.categoryId) throw new Error('创建游戏失败: 分组ID无效');
-        await this.bot.api.channelRoleUpdate({
-          channel_id: this.categoryId,
-          type: 'role_id',
-          value: this.roleId.toString(),
-          allow: Permission.VIEW_CHANNELS,
-        });
-      }),
-
-      // 创建玩家频道
-      run(async () => {
-        this.townsquareChannelId = (
-          await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
-        ).id;
-      }),
-
-      // 创建说书人频道
-      run(async () => {
-        this.storytellerChannelId = (
-          await this.createTextChannel('🏢 城镇广场 (说书人)', ChannelMode.Storyteller)
-        ).id;
-      }),
-
-      // 创建语音房间频道和邀请连接
-      run(async () => {
-        this.voiceChannelId = (
-          await this.bot.api.channelCreate({
-            guild_id: this.config.guildId,
-            name: `‣ ${this.name}`,
-            type: ApiChannelType.VOICE,
-            voice_quality: VoiceQuality.HIGH,
-            limit_amount: 20,
-            parent_id: this.config.roomCategoryId,
-          })
-        ).id;
-
-        this.channels.push(this.voiceChannelId);
-
-        // 创建邀请连接
-        this.invite = (
-          await this.bot.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })
-        ).url;
-      }),
-    ]);
-
-    if (!this.storytellerChannelId) throw new Error('创建游戏失败: 说书人频道ID无效');
-    if (!this.invite) throw new Error('创建游戏失败: 邀请连接无效');
-
-    // 发送邀请链接到说书人频道
-    await this.bot.api.messageCreate({
-      target_id: this.storytellerChannelId,
-      type: ApiMessageType.CARD,
-      content: JSON.stringify(inviteCard(this.name, this.invite)),
+      if (!this.storytellerId) throw new Error('创建游戏失败: 说书人ID无效');
+      this.router.routeUser(this.storytellerId);
     });
 
-    this.status = GameStatus.WAITING_FOR_STORYTELLER;
-    return true;
+    return;
   }
 
   private async createTextChannel(name: string, mode: ChannelMode) {
-    const channel = await this.bot.api.channelCreate({
-      guild_id: this.config.guildId,
-      name: name,
-      type: ApiChannelType.TEXT,
-      parent_id: this.categoryId,
-    });
-
-    if (mode == ChannelMode.Player) {
-      // 拒绝说书人查看
-      await this.bot.api.channelRoleUpdate({
-        channel_id: channel.id,
-        type: 'user_id',
-        value: this.storytellerId,
-        deny: Permission.VIEW_CHANNELS,
+    return await this.run(async () => {
+      const channel = await this.bot.api.channelCreate({
+        guild_id: this.config.guildId,
+        name: name,
+        type: ApiChannelType.TEXT,
+        parent_id: this.categoryId,
       });
-    } else if (mode == ChannelMode.Storyteller) {
-      // 拒绝玩家查看
-      await Promise.all([
-        this.bot.api.channelRoleUpdate({
-          channel_id: channel.id,
-          type: 'role_id',
-          value: this.roleId.toString(),
-          deny: Permission.VIEW_CHANNELS,
-        }),
-        this.bot.api.channelRoleUpdate({
-          channel_id: channel.id,
-          type: 'role_id',
-          value: this.config.storytellerRoleId.toString(),
-          allow: Permission.VIEW_CHANNELS,
-        }),
-      ]);
-    }
 
-    this.channels.push(channel.id);
-    return channel;
+      if (mode == ChannelMode.Player) {
+        // 拒绝说书人查看
+        await this.bot.api.channelRoleUpdate({
+          channel_id: channel.id,
+          type: 'user_id',
+          value: this.storytellerId,
+          deny: Permission.VIEW_CHANNELS,
+        });
+      } else if (mode == ChannelMode.Storyteller) {
+        // 拒绝玩家查看
+        await Promise.all([
+          this.bot.api.channelRoleUpdate({
+            channel_id: channel.id,
+            type: 'role_id',
+            value: this.roleId.toString(),
+            deny: Permission.VIEW_CHANNELS,
+          }),
+          this.bot.api.channelRoleUpdate({
+            channel_id: channel.id,
+            type: 'role_id',
+            value: this.config.storytellerRoleId.toString(),
+            allow: Permission.VIEW_CHANNELS,
+          }),
+        ]);
+      }
+
+      this.textChannels.push(channel.id);
+      return channel;
+    });
   }
 
   async cleanup() {
-    // 删除所有频道
-    await Promise.allSettled(
-      this.channels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
-    );
+    if (this.destroyed) return;
 
-    // 删除角色
-    if (this.roleId !== -1) {
-      await this.bot.api.roleDelete({
+    this.destroyed = true;
+
+    const routine = async () => {
+      // 注销说书人
+      this.router.unrouteUser(this.storytellerId);
+
+      // 注销语音频道
+      for (const channel of this.voiceChannels) {
+        this.router.unrouteChannel(channel);
+      }
+
+      // 删除所有频道
+      await Promise.allSettled(
+        this.textChannels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
+      );
+      await Promise.allSettled(
+        this.voiceChannels.reverse().map((channel) => this.bot.api.channelDelete(channel)),
+      );
+
+      // 删除角色
+      if (this.roleId !== -1) {
+        await this.bot.api.roleDelete({
+          guild_id: this.config.guildId,
+          role_id: this.roleId,
+        });
+      }
+
+      // 取消说书人角色
+      await this.bot.api.roleRevoke({
         guild_id: this.config.guildId,
-        role_id: this.roleId,
+        user_id: this.storytellerId,
+        role_id: this.config.storytellerRoleId,
       });
+    };
+
+    if (this.runCounter > 0) {
+      return new Promise<void>((resolve) => {
+        this.cleanupCallback = () => {
+          routine().finally(resolve);
+        };
+      });
+    } else {
+      await routine();
+    }
+  }
+
+  private async updateStoryTellerControl() {
+    let status: string = '';
+    let mode: string = '';
+    let buttons: ActionButton[] = [];
+    let met: string = '';
+    let icon = this.status === GameStatus.NIGHT ? '🌠' : '🌅';
+
+    switch (this.status) {
+      case GameStatus.PREPARING:
+        mode = `准备阶段`;
+        met = ` (met)${this.storytellerId}(met)`;
+        status =
+          '小镇已就绪，在此发送的内容将转发给所有玩家\n(font)建议利用现在这个时机向玩家发送剧本和需要解释的规则等(font)[warning]';
+        buttons = [{ text: '⭐ 开始游戏', theme: 'info', value: '[st]gameStart' }];
+        break;
+      case GameStatus.NIGHT:
+        mode = `夜晚阶段`;
+        status =
+          '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)使用托梦功能为镇民提供信息，亦可前往小屋与镇民语音(font)[warning]';
+        buttons = [
+          { text: '🌅 黎明初生', theme: 'info', value: '[st]gameDay' },
+          { text: '前往小屋', theme: 'success', value: '[st]listGoto' },
+        ];
+        break;
+      case GameStatus.DAY:
+        mode = `白天阶段 - 广场集会`;
+        status = '镇民聚集在广场中\n(font)使用发起投票功能可发起提名(font)[warning]';
+        buttons = [
+          { text: '🌄 夜幕降临', theme: 'info', value: '[st]gameNight' },
+          { text: '自由活动', theme: 'primary', value: '[st]gameRoam' },
+          { text: '发起投票', theme: 'warning', value: '[st]listVote' },
+        ];
+        break;
+      case GameStatus.ROAMING:
+        mode = `白天阶段 - 自由活动`;
+        status =
+          '现在是自由活动时间\n(font)你和镇民一样可以前往各地，同时你还可以前往玩家小屋(font)[warning]';
+        buttons = [
+          { text: '🏢 广场集会', theme: 'info', value: '[st]gameNight' },
+          { text: '前往小屋', theme: 'success', value: '[st]listGoto' },
+        ];
+        break;
     }
 
-    // 取消说书人角色
-    await this.bot.api.roleRevoke({
-      guild_id: this.config.guildId,
-      user_id: this.storytellerId,
-      role_id: this.config.storytellerRoleId,
-    });
+    this.run(async () =>
+      this.storytellerControl!.push({
+        content: JSON.stringify({
+          image: this.config.assets[this.status === GameStatus.NIGHT ? 'night' : 'day']!,
+          invite: this.invite!,
+          header: `**(font)🌅 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}`,
+          status,
+          groups: [
+            buttons as any,
+            [
+              { text: '状态', theme: 'primary', value: '[st]listStatus' },
+              { text: '托梦', theme: 'warning', value: '[st]listPrivate' },
+              { text: '换座', theme: 'info', value: '[st]listSwap' },
+              { text: '禁言', theme: 'success', value: '[st]listMute' },
+            ],
+          ],
+        } satisfies StorytellerTemplateParams),
+        template_id: this.config.templates.storyteller,
+      }),
+    );
+  }
+
+  async gameStart() {
+    // TODO: lock player list, create cottages
+    await this.gameNight();
+  }
+
+  async gameDelete() {
+    await this.cleanup();
+  }
+
+  async gameDay() {
+    this.status = GameStatus.DAY;
+
+    // TODO: move people into the town square
+    await this.updateStoryTellerControl();
+  }
+
+  async gameNight() {
+    this.status = GameStatus.NIGHT;
+
+    // TODO: move people into their cottages
+    await this.updateStoryTellerControl();
+  }
+
+  async gameRoam() {
+    this.status = GameStatus.ROAMING;
+
+    // TODO: notify game status changes
+    await this.updateStoryTellerControl();
   }
 
   private async enterPrepareState() {
     this.status = GameStatus.PREPARING;
+    await this.updateStoryTellerControl();
+  }
+
+  private async assignPlayer(user: string) {
+    // 加入玩家队列
+    this.players.push({
+      id: user,
+      slot: this.players.length,
+      status: PlayerStatus.ALIVE,
+    });
+
+    this.router.routeUser(user);
+  }
+
+  private async removePlayer(user: string) {
+    // 从游戏中移除
+    const index = this.players.findIndex((player) => player.id === user);
+    if (index === -1) return;
+    this.players.splice(index, 1);
+    this.router.unrouteUser(user);
+  }
+
+  private async addSpectator(user: string) {
+    this.spectators.add(user);
+    this.router.routeUser(user);
+
+    // TODO: mute user
+  }
+
+  private async removeSpectator(user: string) {
+    this.spectators.delete(user);
+    this.router.unrouteUser(user);
+
+    // TODO: unmute user
   }
 
   /**
    * 玩家加入游戏
    * @param user 正在加入的玩家
    */
-  private async joinGame(player: User) {}
+  async joinGame(user: string) {
+    // 说书人不需要加入游戏
+    if (user !== this.storytellerId) {
+      if (this.status === GameStatus.PREPARING) {
+        // 只有在准备阶段才会自动加入游戏玩家中
+        await this.assignPlayer(user);
+      } else {
+        // 其他阶段只加入到旁观者阵营（禁言)
+        await this.addSpectator(user);
+      }
+    }
 
-  async joinChannel(user: User) {
     switch (this.status) {
       case GameStatus.WAITING_FOR_STORYTELLER:
-        await this.joinGame(user);
-
         // 如果是说书人加入，更新状态
-        if (user.id === this.storytellerId) {
+        if (user === this.storytellerId) {
           await this.enterPrepareState();
         }
     }

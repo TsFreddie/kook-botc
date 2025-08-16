@@ -1,11 +1,13 @@
-import { ApiChannelType, ApiMessageType, Permission } from './lib/api.ts';
+import { ApiMessageType } from './lib/api.ts';
 import { KookClient, type KookClientConfig } from './lib/kook.ts';
 import { config as dotenv } from 'dotenv';
 import { creatingInfo, introCard, introCardAction } from './templates/intro.ts';
 import { createdCard, existedCard } from './templates/created.ts';
-import { Manager } from './manager.ts';
+import { SessionRouter } from './manager.ts';
 import type { GameConfig } from './types.ts';
 import { GameStatus } from './game.ts';
+import { storytellerTwig } from './templates/storyteller.ts';
+import { townsqareTwig } from './templates/townsquare.ts';
 
 dotenv({ quiet: true });
 
@@ -86,7 +88,7 @@ const log = async (msg: string) => {
   }
 };
 
-let GLOBAL_MANAGER: Manager | undefined;
+let GLOBAL_MANAGER: SessionRouter | undefined;
 
 // 配置机器人监听
 const setupListeners = (config: GameConfig) => {
@@ -118,7 +120,7 @@ const setupListeners = (config: GameConfig) => {
   }
 
   // 游戏会话管理
-  const MANAGER = new Manager(bot, config);
+  const MANAGER = new SessionRouter(bot, config);
   GLOBAL_MANAGER = MANAGER;
 
   /** 创建房间 */
@@ -155,7 +157,22 @@ const setupListeners = (config: GameConfig) => {
   };
 
   bot.onMessageBtnClick(async (event) => {
-    switch (event.extra.body.value) {
+    const value = event.extra.body.value;
+
+    if (value.startsWith('[st]')) {
+      // 尝试执行说书人操作
+      console.log(typeof event.extra.body.user_id);
+      const game = await MANAGER.getGameByUserId(event.extra.body.user_id);
+      const handlerName = value.slice(4);
+
+      const handler = (game as any)[handlerName];
+      if (handler && typeof handler === 'function') {
+        handler.call(game);
+      }
+      return;
+    }
+
+    switch (value) {
       case 'createRoom':
         await createRoom(
           event.extra.body.target_id,
@@ -166,7 +183,21 @@ const setupListeners = (config: GameConfig) => {
     }
   });
 
-  bot.onJoinedChannel(async (event) => {});
+  bot.onJoinedChannel(async (event) => {
+    const user = event.extra.body.user_id;
+    const channel = event.extra.body.channel_id;
+    const userGame = MANAGER.getGameByUserId(user);
+    // 用户已经在游戏里了，暂时不需要处理任何事情
+    // TODO：可能需要统计玩家在语音频道进出的数量，所以还是得通知 game
+    if (!userGame) return;
+
+    const game = MANAGER.getGameByChannelId(channel);
+    // 频道不属于任何游戏，不用管
+    if (!game) return;
+
+    // 用户不在游戏内，加入游戏
+    await game.joinGame(event.extra.body.user_id);
+  });
 
   bot.onExitedChannel(async (event) => {});
 };
@@ -183,6 +214,74 @@ const cleanup = async () => {
 
 // 初始化流程（配置身份组和频道分组）
 const initialize = async () => {
+  // 上传 Assets 文件夹
+  let existingAssets: Record<string, string> | null = null;
+
+  try {
+    existingAssets = JSON.parse(await Bun.file('.assets.json').text());
+  } catch (e) {}
+
+  const uploadAsset = async (name: string, filename: string) => {
+    if (existingAssets && existingAssets[name]) {
+      return existingAssets[name];
+    }
+
+    const file = Bun.file(`./assets/${filename}`);
+    const response = await bot.api.assetCreate({ file });
+    console.log(`🔄 已上传素材: ${name}(${filename})`);
+    return response.url;
+  };
+
+  const assets = {
+    day: await uploadAsset('day', 'banner_day.png'),
+    night: await uploadAsset('night', 'banner_night.png'),
+  };
+
+  // 保存 Assets 数据
+  await Bun.write('.assets.json', JSON.stringify(assets));
+  console.log(`🔄 已初始化素材`);
+
+  // 检查是否存在模版
+  const templateList = await bot.api.templateList();
+  const templateMap = new Map(templateList.items.map((template) => [template.title, template]));
+
+  const checkOrCreateTwig = async (name: string, content: () => Promise<string>) => {
+    const template = templateMap.get(name);
+    const text = await content();
+
+    if (template) {
+      if (template.content === text) {
+        return template.id;
+      }
+
+      await bot.api.templateUpdate({
+        id: template.id,
+        content: await content(),
+      });
+
+      console.log(`🔄 已更新模版: ${name}`);
+      return template.id;
+    }
+
+    const newTemplate = await bot.api.templateCreate({
+      title: name,
+      content: await content(),
+      type: 0,
+      msgtype: 2,
+    });
+
+    console.log(`🔄 已创建模版: ${name}`);
+    return newTemplate.model.id;
+  };
+
+  // 处理模版ID
+  const templates = {
+    storyteller: await checkOrCreateTwig('storyteller', storytellerTwig),
+    townsquare: await checkOrCreateTwig('townsquare', townsqareTwig),
+  };
+
+  console.log(`🔄 已初始化消息模版`);
+
   // 检查是否存在"说书人"身份，没有的话创建一个
   const roles = await bot.api.roleList({ guild_id });
 
@@ -234,7 +333,8 @@ const initialize = async () => {
     guildId: guild_id,
     storytellerRoleId: storytellerRoleId,
     roomCategoryId: roomCategory.id,
-    // gameCategoryId: gameCategory.id,
+    templates,
+    assets,
   });
   READY = true;
   log('✅ 机器人已上线');
