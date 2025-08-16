@@ -6,6 +6,7 @@ import type { StorytellerTemplateParams } from './templates/storyteller.ts';
 import type { ActionButton } from './templates/types.ts';
 import type { Router } from './manager.ts';
 import { townCard, townHeader } from './templates/town.ts';
+import { textCard } from './templates/text.ts';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -154,7 +155,7 @@ export class Game {
             channel_id: this.categoryId,
             type: 'role_id',
             value: '0',
-            deny: Permission.VIEW_CHANNELS,
+            deny: Permission.VIEW_CHANNELS | Permission.SEND_MESSAGES,
           });
 
           // 将小镇排序置顶
@@ -183,20 +184,17 @@ export class Game {
             type: 'role_id',
             value: this.roleId.toString(),
             allow: Permission.VIEW_CHANNELS,
+            deny: Permission.SEND_MESSAGES,
           });
         })(),
 
-        // 创建玩家频道
-        (async () => {
-          this.townsquareChannelId = (
-            await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
-          )?.id;
-        })(),
-
-        // 创建说书人频道
+        // 创建文本频道
         (async () => {
           this.storytellerChannelId = (
-            await this.createTextChannel('🏢 城镇广场 (说书人)', ChannelMode.Storyteller)
+            await this.createTextChannel('🏢 说书人控制台', ChannelMode.Storyteller)
+          )?.id;
+          this.townsquareChannelId = (
+            await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
           )?.id;
         })(),
 
@@ -228,25 +226,22 @@ export class Game {
       if (!this.invite) throw new Error('创建游戏失败: 邀请连接无效');
 
       // 初始化城镇广场抬头卡片
-      await Promise.all([
-        (async () =>
-          (this.townCard = new MessageQueue(
-            this.bot,
-            (
-              await this.bot.api.messageCreate({
-                target_id: this.storytellerChannelId!,
-                type: ApiMessageType.CARD,
-                content: JSON.stringify(townCard(this.name, this.invite!, this.isVoiceChannelOpen)),
-              })
-            ).msg_id,
-          )))(),
+      this.townCard = new MessageQueue(
+        this.bot,
+        (
+          await this.bot.api.messageCreate({
+            target_id: this.storytellerChannelId!,
+            type: ApiMessageType.CARD,
+            content: JSON.stringify(townCard(this.name, this.invite!, this.isVoiceChannelOpen)),
+          })
+        ).msg_id,
+      );
 
-        this.bot.api.messageCreate({
-          target_id: this.townsquareChannelId!,
-          type: ApiMessageType.CARD,
-          content: JSON.stringify(townHeader(this.name, this.invite!)),
-        }),
-      ]);
+      await this.bot.api.messageCreate({
+        target_id: this.townsquareChannelId!,
+        type: ApiMessageType.CARD,
+        content: JSON.stringify(townHeader(this.name, this.invite!)),
+      });
 
       // 初始化说书人频道
       this.storytellerControl = new MessageQueue(
@@ -283,12 +278,12 @@ export class Game {
       });
 
       if (mode == ChannelMode.Player) {
-        // 拒绝说书人查看
+        // 拒绝说书人发言
         await this.bot.api.channelRoleUpdate({
           channel_id: channel.id,
           type: 'user_id',
           value: this.storytellerId,
-          deny: Permission.VIEW_CHANNELS,
+          deny: Permission.SEND_MESSAGES,
         });
       } else if (mode == ChannelMode.Storyteller) {
         // 拒绝玩家查看
@@ -527,6 +522,19 @@ export class Game {
         role_id: this.roleId,
       }),
     );
+
+    // 发送消息提醒玩家
+    await this.run(() =>
+      this.bot.api.messageCreate({
+        target_id: this.voiceChannelId!,
+        type: ApiMessageType.CARD,
+        content: JSON.stringify(
+          textCard(
+            `(met)${user}(met) 加入了 ${this.name}。请前往 (chn)${this.townsquareChannelId}(chn) 参与游戏。`,
+          ),
+        ),
+      }),
+    );
   }
 
   private async playerLeave(user: string) {
@@ -586,12 +594,16 @@ export class Game {
       player.left = true;
     }
 
-    if (this.status === GameStatus.PREPARING) {
+    // 说书人不能退出自己的小镇
+    if (user === this.storytellerId) return;
+
+    if (
+      this.status === GameStatus.PREPARING ||
+      this.status === GameStatus.WAITING_FOR_STORYTELLER
+    ) {
       // 准备阶段退出频道视为退出游戏
       await this.playerLeave(user);
     }
-
-    console.log(this.activeUsers);
   }
 
   /**
@@ -601,7 +613,10 @@ export class Game {
   async joinGame(user: string) {
     // 说书人不需要加入游戏
     if (user !== this.storytellerId) {
-      if (this.status === GameStatus.PREPARING) {
+      if (
+        this.status === GameStatus.PREPARING ||
+        this.status === GameStatus.WAITING_FOR_STORYTELLER
+      ) {
         // 只有在准备阶段才会自动加入游戏玩家中
         await this.playerJoin(user);
       } else {

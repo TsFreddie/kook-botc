@@ -248,9 +248,7 @@ export interface DeletedBlockListEvent extends SystemMessageEvent {
 
 export interface EmojiEvent extends SystemMessageEvent {
   extra: SystemMessageExtra<
-    | SystemEventType.ADDED_EMOJI
-    | SystemEventType.REMOVED_EMOJI
-    | SystemEventType.UPDATED_EMOJI,
+    SystemEventType.ADDED_EMOJI | SystemEventType.REMOVED_EMOJI | SystemEventType.UPDATED_EMOJI,
     {
       id: string;
       name: string;
@@ -569,28 +567,19 @@ export type MessageUpdatedHandler = (event: UpdatedMessageEvent) => void | Promi
 export type MessageDeletedHandler = (event: DeletedMessageEvent) => void | Promise<void>;
 
 /**
- * Typed event manager for handling Kook events with type safety
+ * Event emitter for handling Kook events with type safety and concurrent execution
  */
-export class TypedEventManager {
+export class TypedEventManager extends EventTarget {
   private parser: EventParser;
   private debug: boolean;
   private onError?: (error: Error) => void;
-
-  // Event handlers
-  private textMessageHandlers: TextMessageHandler[] = [];
-  private systemEventHandlers: SystemEventHandler[] = [];
-  private userEventHandlers: UserEventHandler[] = [];
-  private guildEventHandlers: GuildEventHandler[] = [];
-  private channelEventHandlers: ChannelEventHandler[] = [];
-
-  // Specific event handlers
-  private specificHandlers: Map<SystemEventType, Function[]> = new Map();
 
   // Filters and middleware
   private filters: EventFilter[] = [];
   private middleware: EventMiddleware[] = [];
 
   constructor(debug: boolean = false) {
+    super();
     this.parser = new EventParser(debug);
     this.debug = debug;
   }
@@ -619,12 +608,8 @@ export class TypedEventManager {
 
       // Apply middleware and handle event
       await this.applyMiddleware(event, async () => {
-        // Handle by category
-        if (event.type !== MessageType.SYSTEM) {
-          await this.handleTextMessage(event as TextMessageEvent);
-        } else {
-          await this.handleSystemEvent(event as SystemEvent);
-        }
+        // Emit events concurrently - no need to wait for handlers
+        this.emitEvent(event);
       });
     } catch (error) {
       if (this.debug) {
@@ -634,217 +619,144 @@ export class TypedEventManager {
   }
 
   /**
-   * Handle text messages
+   * Emit events to all registered listeners
    */
-  private async handleTextMessage(event: TextMessageEvent): Promise<void> {
+  private emitEvent(event: KookEvent): void {
     if (this.debug) {
-      console.log(`[TypedEventManager] Handling text message: ${event.msg_id}`);
+      console.log(
+        `[TypedEventManager] Emitting event: ${event.type === MessageType.SYSTEM ? (event as SystemEvent).extra.type : 'text'}`,
+      );
     }
 
-    for (const handler of this.textMessageHandlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error('[TypedEventManager] Text message handler error:', handlerError);
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
-    }
-  }
+    // Emit specific event types
+    if (event.type !== MessageType.SYSTEM) {
+      // Text message events
+      this.dispatchEvent(new CustomEvent('textMessage', { detail: event }));
+    } else {
+      const systemEvent = event as SystemEvent;
+      const eventType = systemEvent.extra.type;
 
-  /**
-   * Handle system events
-   */
-  private async handleSystemEvent(event: SystemEvent): Promise<void> {
-    const eventType = event.extra.type;
+      // System event categories
+      const category = this.parser.getEventCategory(event);
+      this.dispatchEvent(new CustomEvent('systemEvent', { detail: systemEvent }));
+      this.dispatchEvent(new CustomEvent(category + 'Event', { detail: systemEvent }));
 
-    if (this.debug) {
-      console.log(`[TypedEventManager] Handling system event: ${eventType}`);
-    }
-
-    // Handle by category
-    const category = this.parser.getEventCategory(event);
-    switch (category) {
-      case 'user':
-        await this.handleUserEvent(event as UserEvent);
-        break;
-      case 'guild':
-        await this.handleGuildEvent(event as GuildEvent);
-        break;
-      case 'channel':
-        await this.handleChannelEvent(event as ChannelEvent);
-        break;
-    }
-
-    // Handle specific event type
-    await this.handleSpecificEvent(eventType, event);
-
-    // Handle general system events
-    for (const handler of this.systemEventHandlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error('[TypedEventManager] System event handler error:', handlerError);
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
+      // Specific system event types
+      this.dispatchEvent(new CustomEvent(eventType, { detail: systemEvent }));
     }
   }
 
-  /**
-   * Handle user events
-   */
-  private async handleUserEvent(event: UserEvent): Promise<void> {
-    for (const handler of this.userEventHandlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error('[TypedEventManager] User event handler error:', handlerError);
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handle guild events
-   */
-  private async handleGuildEvent(event: GuildEvent): Promise<void> {
-    for (const handler of this.guildEventHandlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error('[TypedEventManager] Guild event handler error:', handlerError);
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handle channel events
-   */
-  private async handleChannelEvent(event: ChannelEvent): Promise<void> {
-    for (const handler of this.channelEventHandlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error('[TypedEventManager] Channel event handler error:', handlerError);
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
-    }
-  }
-
-  /**
-   * Handle specific event types
-   */
-  private async handleSpecificEvent(eventType: SystemEventType, event: SystemEvent): Promise<void> {
-    const handlers = this.specificHandlers.get(eventType);
-    if (!handlers) {
-      return;
-    }
-
-    for (const handler of handlers) {
-      try {
-        await handler(event);
-      } catch (error) {
-        const handlerError = error instanceof Error ? error : new Error(String(error));
-        if (this.debug) {
-          console.error(
-            `[TypedEventManager] Specific event handler error for ${eventType}:`,
-            handlerError,
-          );
-        }
-        if (this.onError) {
-          this.onError(handlerError);
-        }
-      }
-    }
-  }
-
-  // Event handler registration methods
+  // Event handler registration methods using addEventListener
   onTextMessage(handler: TextMessageHandler): void {
-    this.textMessageHandlers.push(handler);
+    this.addEventListener('textMessage', (event: Event) => {
+      const customEvent = event as CustomEvent<TextMessageEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onSystemEvent(handler: SystemEventHandler): void {
-    this.systemEventHandlers.push(handler);
+    this.addEventListener('systemEvent', (event: Event) => {
+      const customEvent = event as CustomEvent<SystemEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onUserEvent(handler: UserEventHandler): void {
-    this.userEventHandlers.push(handler);
+    this.addEventListener('userEvent', (event: Event) => {
+      const customEvent = event as CustomEvent<UserEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onGuildEvent(handler: GuildEventHandler): void {
-    this.guildEventHandlers.push(handler);
+    this.addEventListener('guildEvent', (event: Event) => {
+      const customEvent = event as CustomEvent<GuildEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onChannelEvent(handler: ChannelEventHandler): void {
-    this.channelEventHandlers.push(handler);
+    this.addEventListener('channelEvent', (event: Event) => {
+      const customEvent = event as CustomEvent<ChannelEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
+  }
+
+  /**
+   * Safely execute a handler with error handling
+   */
+  private safeExecuteHandler(handlerFn: () => void | Promise<void>): void {
+    // Execute handler asynchronously without waiting
+    Promise.resolve().then(async () => {
+      try {
+        await handlerFn();
+      } catch (error) {
+        const handlerError = error instanceof Error ? error : new Error(String(error));
+        if (this.debug) {
+          console.error('[TypedEventManager] Handler error:', handlerError);
+        }
+        if (this.onError) {
+          this.onError(handlerError);
+        }
+      }
+    });
   }
 
   // Specific event handlers
   onJoinedChannel(handler: JoinedChannelHandler): void {
-    this.addSpecificHandler(SystemEventType.JOINED_CHANNEL, handler);
+    this.addEventListener(SystemEventType.JOINED_CHANNEL, (event: Event) => {
+      const customEvent = event as CustomEvent<JoinedChannelEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onExitedChannel(handler: ExitedChannelHandler): void {
-    this.addSpecificHandler(SystemEventType.EXITED_CHANNEL, handler);
+    this.addEventListener(SystemEventType.EXITED_CHANNEL, (event: Event) => {
+      const customEvent = event as CustomEvent<ExitedChannelEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onUserUpdated(handler: UserUpdatedHandler): void {
-    this.addSpecificHandler(SystemEventType.USER_UPDATED, handler);
+    this.addEventListener(SystemEventType.USER_UPDATED, (event: Event) => {
+      const customEvent = event as CustomEvent<UserUpdatedEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onMessageBtnClick(handler: MessageBtnClickHandler): void {
-    this.addSpecificHandler(SystemEventType.MESSAGE_BTN_CLICK, handler);
+    this.addEventListener(SystemEventType.MESSAGE_BTN_CLICK, (event: Event) => {
+      const customEvent = event as CustomEvent<MessageBtnClickEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onReactionAdded(handler: ReactionHandler): void {
-    this.addSpecificHandler(SystemEventType.ADDED_REACTION, handler);
+    this.addEventListener(SystemEventType.ADDED_REACTION, (event: Event) => {
+      const customEvent = event as CustomEvent<ReactionEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onReactionRemoved(handler: ReactionHandler): void {
-    this.addSpecificHandler(SystemEventType.DELETED_REACTION, handler);
+    this.addEventListener(SystemEventType.DELETED_REACTION, (event: Event) => {
+      const customEvent = event as CustomEvent<ReactionEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onMessageUpdated(handler: MessageUpdatedHandler): void {
-    this.addSpecificHandler(SystemEventType.UPDATED_MESSAGE, handler);
+    this.addEventListener(SystemEventType.UPDATED_MESSAGE, (event: Event) => {
+      const customEvent = event as CustomEvent<UpdatedMessageEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   onMessageDeleted(handler: MessageDeletedHandler): void {
-    this.addSpecificHandler(SystemEventType.DELETED_MESSAGE, handler);
-  }
-
-  /**
-   * Add specific event handler
-   */
-  private addSpecificHandler(eventType: SystemEventType, handler: Function): void {
-    if (!this.specificHandlers.has(eventType)) {
-      this.specificHandlers.set(eventType, []);
-    }
-    this.specificHandlers.get(eventType)!.push(handler);
+    this.addEventListener(SystemEventType.DELETED_MESSAGE, (event: Event) => {
+      const customEvent = event as CustomEvent<DeletedMessageEvent>;
+      this.safeExecuteHandler(() => handler(customEvent.detail));
+    });
   }
 
   /**
