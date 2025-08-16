@@ -67,7 +67,7 @@ export const existedCard = (name: string, channelId: string) => [
         type: 'section',
         text: {
           type: 'kmarkdown',
-          content: `(font)你目前正在${name}进行游戏，若要创建新的小镇需要由说书人拆除小镇或将你移除小镇(font)[warning] | 请点击前往：(chn)${channelId}(chn)`,
+          content: `(font)你目前正在${name}进行游戏，若要创建新的小镇需要先拆除或离开小镇(font)[warning]`,
         },
       },
     ],
