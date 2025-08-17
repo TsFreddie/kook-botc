@@ -35,30 +35,36 @@ export class MessageQueue {
 
   async run() {
     if (this.isRunning) return;
-
     this.isRunning = true;
-    while (this.messages.length > 0) {
-      const message = this.messages.shift();
 
-      if (message) {
-        // only send last message
-        if (this.messages.length == 0) {
-          try {
-            await this.bot.api.messageUpdate({
-              msg_id: this.messageId,
-              content: message.message.content,
-              template_id: message.message.template_id,
-            });
-          } catch (err) {
-            // since we need this to not block, don't throw
-            console.error(err);
+    await new Promise<void>((resolve) => {
+      // run next tick
+      setTimeout(async () => {
+        while (this.messages.length > 0) {
+          const message = this.messages.shift();
+
+          if (message) {
+            // only send last message
+            if (this.messages.length == 0) {
+              try {
+                await this.bot.api.messageUpdate({
+                  msg_id: this.messageId,
+                  content: message.message.content,
+                  template_id: message.message.template_id,
+                });
+              } catch (err) {
+                // since we need this to not block, don't throw
+                console.error(err);
+              }
+            }
+
+            // resolve everything
+            message.resolve();
           }
         }
-
-        // resolve everything
-        message.resolve();
-      }
-    }
-    this.isRunning = false;
+        this.isRunning = false;
+        resolve();
+      });
+    });
   }
 }
