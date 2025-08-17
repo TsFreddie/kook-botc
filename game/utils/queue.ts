@@ -54,6 +54,7 @@ export class SequentialQueue {
           // log the error and notify the global handler
           console.error(e);
           errorHandler?.(e);
+          resolve();
         } finally {
           counter--;
         }
@@ -163,6 +164,7 @@ export class LatestQueue {
             // log the error and notify the global handler
             console.error(e);
             errorHandler?.(e);
+            resolve();
           } finally {
             counter--;
           }

@@ -7,6 +7,10 @@ import { reportGlobalError } from './utils/error';
 
 import TownControlCard from './cards/TownControlCard';
 import TownHeaderCard from './cards/TownHeaderCard';
+import StorytellerControlCard from './cards/StorytellerControlCard';
+import TownsquareControlCard from './cards/TownsquareControlCard';
+import type { GameState } from './session';
+import type { CardState } from './utils/card';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -29,43 +33,74 @@ export enum RendererState {
  * 渲染器负责频道状态管理
  */
 export class Renderer {
-  private storytellerChannelId = '';
-  private townsquareChannelId = '';
-  private voiceChannelId = '';
+  public readonly name;
+
+  private _storytellerChannelId = '';
+  private _townsquareChannelId = '';
+  private _voiceChannelId = '';
+
+  private cards: {
+    storyteller: CardState<object>[];
+    townsquare: CardState<object>[];
+  };
+
   private roleId = -1;
-  private storytellerId;
-  private name;
-  private register;
-  private state = RendererState.None;
+  private rendererState = RendererState.None;
+
+  // Public getters for accessing private properties
+  get storytellerChannelId() {
+    return this._storytellerChannelId;
+  }
+  get townsquareChannelId() {
+    return this._townsquareChannelId;
+  }
+  get voiceChannelId() {
+    return this._voiceChannelId;
+  }
 
   private roles = new UserRoles();
 
   private readonly invite = $state('');
   private readonly open = $state(false);
 
-  private townControl = TownControlCard({
-    name: '',
-    invite: this.invite.value,
-    open: this.open.value,
-  });
-
-  private townHeader = TownHeaderCard({
-    name: '',
-    invite: this.invite.value,
-  });
-
   private cleanupCallback: (() => void) | null = null;
 
-  constructor(storytellerId: string, register: Register) {
-    this.register = register;
-    this.storytellerId = storytellerId;
-
+  constructor(
+    private storytellerId: string,
+    private register: Register,
+    private state: GameState,
+  ) {
     this.name = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
 
-    this.townControl.name = this.name;
-    this.townHeader.name = this.name;
+    // 配置动态卡片
+    this.cards = {
+      storyteller: [
+        TownControlCard({
+          name: this.name,
+          invite: this.invite.value,
+          open: this.open.value,
+        }),
+        StorytellerControlCard({
+          name: this.name,
+          invite: this.invite.value,
+          phase: this.state.phase.value,
+          storytellerId: this.storytellerId,
+        }),
+      ],
+
+      townsquare: [
+        TownHeaderCard({
+          name: this.name,
+          invite: this.invite.value,
+        }),
+        TownsquareControlCard({
+          invite: this.invite.value,
+          phase: this.state.phase.value,
+        }),
+      ],
+    };
   }
 
   /**
@@ -74,8 +109,8 @@ export class Renderer {
    */
   async initialize() {
     // 只允许初始化一次
-    if (this.state !== RendererState.None) return;
-    this.state = RendererState.Initializing;
+    if (this.rendererState !== RendererState.None) return;
+    this.rendererState = RendererState.Initializing;
 
     try {
       // 创建游戏所需角色
@@ -93,21 +128,19 @@ export class Renderer {
       // 创建频道
       const results = await Promise.allSettled([
         (async () => {
-          this.storytellerChannelId = (
+          this._storytellerChannelId = (
             await this.createTextChannel('🏢 城镇广场(说书人)', ChannelMode.Storyteller)
           ).id;
-          this.register.addChannel(this.storytellerChannelId);
-        })(),
+          this.register.addChannel(this._storytellerChannelId);
 
-        (async () => {
-          this.townsquareChannelId = (
+          this._townsquareChannelId = (
             await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
           ).id;
-          this.register.addChannel(this.townsquareChannelId);
+          this.register.addChannel(this._townsquareChannelId);
         })(),
 
         (async () => {
-          this.voiceChannelId = (
+          this._voiceChannelId = (
             await BOT.api.channelCreate({
               guild_id: GAME.guildId,
               name: `‣ ${this.name}`,
@@ -117,10 +150,10 @@ export class Renderer {
               parent_id: GAME.roomCategoryId,
             })
           ).id;
-          this.register.addChannel(this.voiceChannelId);
+          this.register.addChannel(this._voiceChannelId);
 
           this.invite.set(
-            (await BOT.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })).url,
+            (await BOT.api.inviteCreate({ channel_id: this._voiceChannelId, duration: 86400 })).url,
           );
         })(),
       ]);
@@ -136,11 +169,21 @@ export class Renderer {
         throw new Error('创建游戏失败: 创建频道失败');
       }
 
-      // 初始化城镇广场抬头卡片
-      this.townControl.$card.mount(this.storytellerChannelId);
-      this.townHeader.$card.mount(this.townsquareChannelId);
+      // 初始化卡片
+      await Promise.allSettled([
+        (async () => {
+          for (const card of this.cards.storyteller) {
+            await card.$card.mount(this._storytellerChannelId);
+          }
+        })(),
+        (async () => {
+          for (const card of this.cards.townsquare) {
+            await card.$card.mount(this._townsquareChannelId);
+          }
+        })(),
+      ]);
 
-      this.state = RendererState.Initialized;
+      this.rendererState = RendererState.Initialized;
     } catch (err) {
       console.error(err);
       // 报告全局错误，触发机器人关闭
@@ -196,10 +239,20 @@ export class Renderer {
     return channel;
   }
 
+  /** 为用户授予游戏角色 */
+  grantUserRole(userId: string) {
+    this.roles.grant(userId, this.roleId);
+  }
+
+  /** 撤销用户的游戏角色 */
+  revokeUserRole(userId: string) {
+    this.roles.revoke(userId, this.roleId);
+  }
+
   /** 销毁渲染器，这会删除所有相关的角色与频道 */
   async destroy() {
-    const state = this.state;
-    this.state = RendererState.Destroyed;
+    const state = this.rendererState;
+    this.rendererState = RendererState.Destroyed;
 
     if (state === RendererState.None || state === RendererState.Destroyed) return;
 
@@ -210,10 +263,13 @@ export class Renderer {
     }
 
     // 优先销毁所有卡片队列，不再进行更新，并且等待正在更新的消息更新完毕
-    await this.townControl.$card.destroy();
+    await Promise.allSettled([
+      ...this.cards.storyteller.map((card) => card.$card.destroy()),
+      ...this.cards.townsquare.map((card) => card.$card.destroy()),
+    ]);
 
     // 销毁所有频道，不在乎是否失败，因为有可能是因为报错了才触发的，尽量跑就行
-    const channels = [this.storytellerChannelId, this.townsquareChannelId, this.voiceChannelId];
+    const channels = [this._storytellerChannelId, this._townsquareChannelId, this._voiceChannelId];
     let result = await Promise.allSettled(
       channels.filter((channel) => !!channel).map((channel) => BOT.api.channelDelete(channel)),
     );

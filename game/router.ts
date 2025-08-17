@@ -82,6 +82,56 @@ export class Router {
   }
 
   /**
+   * 将用户加入会话
+   */
+  addUserToSession(session: Session, userId: string) {
+    const data = this.sessions.get(session);
+    if (!data) {
+      throw new Error('会话不存在');
+    }
+
+    if (this.userMap.has(userId)) {
+      throw new Error('用户已属于其他会话');
+    }
+
+    data.users.add(userId);
+    this.userMap.set(userId, session);
+
+    // 通知渲染器更新用户角色
+    session.renderer.grantUserRole(userId);
+  }
+
+  /**
+   * 将用户从会话中移除
+   */
+  removeUserFromSession(session: Session, userId: string) {
+    const data = this.sessions.get(session);
+    if (!data) {
+      throw new Error('会话不存在');
+    }
+
+    data.users.delete(userId);
+    this.userMap.delete(userId);
+
+    // 通知渲染器更新用户角色
+    session.renderer.revokeUserRole(userId);
+  }
+
+  /**
+   * 根据频道ID获取会话
+   */
+  getSessionByChannelId(channelId: string): Session | null {
+    return this.channelMap.get(channelId) || null;
+  }
+
+  /**
+   * 根据用户ID获取会话
+   */
+  getSessionByUserId(userId: string): Session | null {
+    return this.userMap.get(userId) || null;
+  }
+
+  /**
    * 删除会话
    */
   removeSession(session: Session) {
@@ -107,13 +157,13 @@ export class Router {
   /**
    * 销毁所有会话
    */
-  destroy() {
+  async destroy() {
     if (this.destroyed) return;
 
     this.destroyed = true;
 
     for (const session of this.sessions.keys()) {
-      session.renderer.destroy();
+      await session.renderer.destroy();
     }
   }
 }

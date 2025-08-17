@@ -20,15 +20,18 @@ export interface StateEvents<T> {
   removeListener: (listener: StateListener<T>) => void;
 }
 
+export type ReactiveState<T> = [T, (newValue: T) => void] & {
+  readonly value: T;
+  readonly set: (value: T) => void;
+};
+
 /**
  * Create a reactive state with React-style API
  *
  * @param initialValue - Initial value for the state
  * @returns A tuple [value, setValue] where value is a reactive proxy and setValue updates it
  */
-export function $state<T>(
-  initialValue: T,
-): [T, (newValue: T) => void] & { readonly value: T; readonly set: (value: T) => void } {
+export function $state<T>(initialValue: T): ReactiveState<T> {
   let _value = initialValue;
   const listeners = new Set<StateListener<T>>();
 

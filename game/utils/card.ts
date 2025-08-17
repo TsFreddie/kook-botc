@@ -2,7 +2,7 @@ import { BOT } from '../../bot';
 import { ApiMessageType } from '../../lib/api';
 import { LatestQueue } from './queue';
 
-type CardState<T extends object> = T & { $card: Card<T> };
+export type CardState<T extends object> = T & { $card: Card<T> };
 
 /**
  * 创建简单的状态包装
@@ -26,7 +26,10 @@ export const $card = <T extends object>(card: Card<T>): CardState<T> => {
         (card as any).registerStateListener(prop, value);
       }
 
-      card['update']();
+      // Only update if value is object or value changed
+      if (typeof value === 'object' || (target as any)[prop] !== value) {
+        card['update']();
+      }
       return true;
     },
 
@@ -113,11 +116,11 @@ export abstract class Card<T extends object> {
   }
 
   /** 将卡片挂载到指定频道 */
-  mount(targetId: string) {
+  async mount(targetId: string) {
     if (this.mounted) throw new Error('卡片已挂载');
     this.mounted = true;
 
-    this.queue.push(async () => {
+    await this.queue.push(async () => {
       const rendered = this.render(this.state);
       this.id = (
         await BOT.api.messageCreate({

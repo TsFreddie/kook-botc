@@ -90,17 +90,19 @@ class Mutes {
    *
    * 会取消所有禁言
    */
-  destroy() {
+  async destroy() {
     if (this.destroyed) return;
     this.destroyed = true;
 
     // 取消禁言所有用户
-    Array.from(this.users.entries()).forEach(async ([id, user]) => {
-      user.muted = false;
-      user.mutedQueue.push(async () => {
-        await BOT.api.guildMuteDelete(GAME.guildId, id, 1);
-      });
-    });
+    await Promise.allSettled(
+      Array.from(this.users.entries()).map(([id, user]) => {
+        user.muted = false;
+        return user.mutedQueue.push(async () => {
+          await BOT.api.guildMuteDelete(GAME.guildId, id, 1);
+        });
+      }),
+    );
     this.users.clear();
   }
 }
