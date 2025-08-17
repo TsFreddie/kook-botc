@@ -85,26 +85,15 @@ class CardRenderer extends Card<Props> {
 
     // Only show restart button when restart is allowed (not in early states)
     if (state.phase !== Phase.INITIALIZING && state.phase !== Phase.WAITING_FOR_STORYTELLER) {
-      buttonGroups.push([
-        { text: '重新开始', theme: 'danger', value: '[st]GameRestart' },
-      ]);
+      buttonGroups.push([{ text: '重新开始', theme: 'danger', value: '[st]GameRestart' }]);
     }
-
-    console.log({
-      content: JSON.stringify({
-        image,
-        status: `**(font)${icon} 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
-        groups: buttonGroups,
-      }),
-      template_id: GAME.templates.storyteller,
-    });
 
     return {
       content: JSON.stringify({
         image,
         status: `**(font)${icon} 说书人控制台(font)[warning]** (font)${mode}(font)[secondary]${met}\n${status}`,
         groups: buttonGroups,
-      }) + "aistne",
+      }),
       template_id: GAME.templates.storyteller,
     };
   }
