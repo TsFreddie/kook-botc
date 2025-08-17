@@ -1,4 +1,4 @@
-import { Card } from '../utils/card';
+import { $card, Card } from '../utils/card';
 
 interface Props {
   name: string;
@@ -9,7 +9,7 @@ interface Props {
 /**
  * 小镇管理工具
  */
-export class TownControlCard extends Card<Props> {
+class CardRenderer extends Card<Props> {
   render(state: Props) {
     return {
       content: JSON.stringify([
@@ -73,3 +73,5 @@ export class TownControlCard extends Card<Props> {
     };
   }
 }
+
+export default (state: Props) => $card(new CardRenderer(state));

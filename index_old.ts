@@ -5,7 +5,7 @@ import { creatingInfo, introCard, introCardAction } from './templates/intro.ts';
 import { createdCard, existedCard } from './templates/created.ts';
 import { SessionRouter } from './manager.ts';
 import type { GameConfig } from './types.ts';
-import { GameStatus } from './game.ts';
+import { GameStatus } from './game_old.ts';
 import { storytellerTwig } from './templates/storyteller.ts';
 import { townsqareTwig } from './templates/townsquare.ts';
 import { AsyncQueue } from './async-queue.ts';

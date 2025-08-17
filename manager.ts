@@ -1,4 +1,4 @@
-import { Game } from './game';
+import { Game } from './game_old';
 import type { KookClient } from './lib/kook';
 import type { GameConfig } from './types';
 

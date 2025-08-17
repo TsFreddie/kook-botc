@@ -1,11 +1,12 @@
 import { BOT, GAME } from '../bot';
 import { ApiChannelType, Permission, VoiceQuality } from '../lib/api';
-import { $card } from './utils/card';
-import { TownControlCard } from './cards/town-control';
+import { $state } from './utils/binder';
 import type { Register } from './router';
 import { UserRoles } from './utils/user-roles';
 import { reportGlobalError } from './utils/error';
-import { TownHeaderCard } from './cards/town-header';
+
+import TownControlCard from './cards/TownControlCard';
+import TownHeaderCard from './cards/TownHeaderCard';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -34,34 +35,35 @@ export class Renderer {
   private roleId = -1;
   private storytellerId;
   private name;
-  private invite = '';
   private register;
   private state = RendererState.None;
+
   private roles = new UserRoles();
 
-  private townControl = $card(
-    new TownControlCard({
-      name: '',
-      invite: '',
-      open: false,
-    }),
-  );
+  private readonly invite = $state('');
+  private readonly open = $state(false);
 
-  private townHeader = $card(
-    new TownHeaderCard({
-      name: '',
-      invite: '',
-    }),
-  );
+  private townControl = TownControlCard({
+    name: '',
+    invite: this.invite.value,
+    open: this.open.value,
+  });
+
+  private townHeader = TownHeaderCard({
+    name: '',
+    invite: this.invite.value,
+  });
 
   private cleanupCallback: (() => void) | null = null;
 
   constructor(storytellerId: string, register: Register) {
     this.register = register;
     this.storytellerId = storytellerId;
+
     this.name = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
+
     this.townControl.name = this.name;
     this.townHeader.name = this.name;
   }
@@ -104,7 +106,7 @@ export class Renderer {
           this.register.addChannel(this.townsquareChannelId);
         })(),
 
-        async () => {
+        (async () => {
           this.voiceChannelId = (
             await BOT.api.channelCreate({
               guild_id: GAME.guildId,
@@ -117,12 +119,10 @@ export class Renderer {
           ).id;
           this.register.addChannel(this.voiceChannelId);
 
-          this.invite = (
-            await BOT.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })
-          ).url;
-
-          this.townControl.invite = this.invite;
-        },
+          this.invite.set(
+            (await BOT.api.inviteCreate({ channel_id: this.voiceChannelId, duration: 86400 })).url,
+          );
+        })(),
       ]);
 
       // 失败处理
@@ -138,7 +138,7 @@ export class Renderer {
 
       // 初始化城镇广场抬头卡片
       this.townControl.$card.mount(this.storytellerChannelId);
-      this;
+      this.townHeader.$card.mount(this.townsquareChannelId);
 
       this.state = RendererState.Initialized;
     } catch (err) {
@@ -169,12 +169,13 @@ export class Renderer {
           value: this.roleId.toString(),
           allow: Permission.VIEW_CHANNELS,
         }),
-        // 禁止说书人查看
+
+        // 禁止说书人发言
         BOT.api.channelRoleUpdate({
           channel_id: channel.id,
           type: 'user_id',
           value: this.storytellerId,
-          deny: Permission.VIEW_CHANNELS,
+          deny: Permission.SEND_MESSAGES,
         }),
       ]);
 

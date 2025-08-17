@@ -59,20 +59,6 @@ BOT.onMessageBtnClick(async (event) => {
   if (event.extra.body.value == 'createRoom') {
     const session = await ROUTER.createSession(event.extra.body.user_id);
     if (session) {
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      session.session.renderer['townControl'].open = true;
-      await new Promise((resolve) => setTimeout(resolve, 1000));
-      session.session.renderer['townControl'].open = false;
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      session.session.renderer['townControl'].open = true;
-      await new Promise((resolve) => setTimeout(resolve, 500));
-      session.session.renderer['townControl'].open = false;
-      await new Promise((resolve) => setTimeout(resolve, 250));
-      session.session.renderer['townControl'].open = true;
-      session.session.renderer['townControl'].open = false;
-      session.session.renderer['townControl'].open = true;
-
-      ROUTER.removeSession(session.session);
     }
   }
 });

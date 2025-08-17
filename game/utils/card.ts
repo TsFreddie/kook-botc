@@ -18,7 +18,14 @@ export const $card = <T extends object>(card: Card<T>): CardState<T> => {
     set(target: T & CardState<T>, prop: string | symbol, value: any) {
       if (prop === '$card') return false;
 
+      // 设置新值
       (target as any)[prop] = value;
+
+      // 动态注册或取消注册状态监听器
+      if (typeof prop === 'string') {
+        (card as any).registerStateListener(prop, value);
+      }
+
       card['update']();
       return true;
     },
@@ -53,6 +60,9 @@ export abstract class Card<T extends object> {
   private id: string = '';
   private mounted: boolean = false;
 
+  /** 存储状态监听器的映射，用于清理 */
+  private stateListeners = new Map<string, Function>();
+
   abstract render(state: T): {
     content: string;
     template_id?: string;
@@ -60,6 +70,46 @@ export abstract class Card<T extends object> {
 
   constructor(state: T) {
     this.state = state;
+    this.setupStateListeners();
+  }
+
+  private setupStateListeners() {
+    for (const [key, value] of Object.entries(this.state)) {
+      this.registerStateListener(key, value);
+    }
+  }
+
+  /** 注册单个状态监听器 */
+  private registerStateListener(key: string, value: any) {
+    // 先清理已存在的监听器
+    this.unregisterStateListener(key);
+
+    if (value && typeof value === 'object') {
+      const events = value._events_;
+      if (events && events.addListener) {
+        const listener = (newValue: any) => {
+          (this.state as any)[key] = newValue;
+          this.update();
+        };
+        events.addListener(listener);
+        this.stateListeners.set(key, listener);
+      }
+    }
+  }
+
+  /** 取消注册状态监听器 */
+  private unregisterStateListener(key: string) {
+    const existingListener = this.stateListeners.get(key);
+    if (existingListener) {
+      const currentValue = (this.state as any)[key];
+      if (currentValue && typeof currentValue === 'object') {
+        const events = currentValue._events_;
+        if (events && events.removeListener) {
+          events.removeListener(existingListener);
+        }
+      }
+      this.stateListeners.delete(key);
+    }
   }
 
   /** 将卡片挂载到指定频道 */
@@ -103,6 +153,11 @@ export abstract class Card<T extends object> {
    * 销毁卡片不会删除消息，因为通常是直接删除频道
    */
   async destroy() {
+    // 清理所有状态监听器
+    for (const key of this.stateListeners.keys()) {
+      this.unregisterStateListener(key);
+    }
+
     await this.queue.destroy(true);
   }
 }

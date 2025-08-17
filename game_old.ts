@@ -1,5 +1,5 @@
-import type { KookClient } from './lib/kook';
-import type { GameConfig } from './types';
+import type { KookClient } from './lib/kook.ts';
+import type { GameConfig } from './types.ts';
 import { ApiChannelType, ApiMessageType, Permission, VoiceQuality } from './lib/api.ts';
 import { MessageQueue } from './msg-queue.ts';
 import type { StorytellerTemplateParams } from './templates/storyteller.ts';
