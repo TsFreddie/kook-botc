@@ -389,6 +389,8 @@ export class Session {
   }
 
   storytellerSelectStatus(userId: string) {
+    if (this.state.listMode.value !== ListMode.STATUS) return;
+
     const player = this.players.find((p) => p.id === userId);
     if (!player) return;
 
@@ -408,6 +410,8 @@ export class Session {
   }
 
   storytellerSelectSwap(userId: string) {
+    if (this.state.listMode.value !== ListMode.SWAP) return;
+
     // Only allow selecting players for swapping
     if (!this.internalHasPlayer(userId)) return;
 
@@ -441,6 +445,8 @@ export class Session {
   }
 
   storytellerSelectSpectate(userId: string) {
+    if (this.state.listMode.value !== ListMode.SPECTATE) return;
+
     // Don't allow spectating the storyteller
     if (userId === this.storytellerId) return;
 
@@ -489,8 +495,10 @@ export class Session {
     }
 
     // 说书人加入语音频道时，进入准备阶段
-    if (userId === this.storytellerId && this.phase(Phase.WAITING_FOR_STORYTELLER)) {
-      this.state.phase.set(Phase.PREPARING);
+    if (userId === this.storytellerId) {
+      if (this.phase(Phase.WAITING_FOR_STORYTELLER)) {
+        this.state.phase.set(Phase.PREPARING);
+      }
 
       if (!this.greeted.has(userId)) {
         this.greeted.add(userId);
