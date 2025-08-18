@@ -1,6 +1,6 @@
 import { BOT, GAME } from '../bot';
 import { ApiChannelType, Permission, VoiceQuality } from '../lib/api';
-import { $state } from './utils/binder';
+import { $state } from './utils/state-binder';
 import type { Register } from './router';
 import { UserRoles } from './utils/user-roles';
 import { reportGlobalError } from './utils/error';
@@ -11,6 +11,7 @@ import StorytellerControlCard from './cards/StorytellerControlCard';
 import TownsquareControlCard from './cards/TownsquareControlCard';
 import type { GameState } from './session';
 import type { CardState } from './utils/card';
+import { DynamicChannels } from './utils/dynamic-channels';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -46,6 +47,7 @@ export class Renderer {
 
   private roleId = -1;
   private rendererState = RendererState.None;
+  private dynamicChannels!: DynamicChannels;
 
   // Public getters for accessing private properties
   get storytellerChannelId() {
@@ -151,6 +153,13 @@ export class Renderer {
             })
           ).id;
           this.register.addChannel(this._voiceChannelId);
+
+          // 动态频道配置
+          this.dynamicChannels = new DynamicChannels(
+            this._voiceChannelId,
+            this.storytellerId,
+            this.register,
+          );
 
           this.invite.set(
             (await BOT.api.inviteCreate({ channel_id: this._voiceChannelId, duration: 86400 })).url,
@@ -268,11 +277,26 @@ export class Renderer {
       ...this.cards.townsquare.map((card) => card.$card.destroy()),
     ]);
 
+    // 销毁所有动态频道
+    if (this.dynamicChannels) {
+      await this.dynamicChannels.destroy();
+    }
+
     // 销毁所有频道，不在乎是否失败，因为有可能是因为报错了才触发的，尽量跑就行
-    const channels = [this._storytellerChannelId, this._townsquareChannelId, this._voiceChannelId];
+    const channels = [
+      this._storytellerChannelId,
+      this._townsquareChannelId,
+      this._voiceChannelId,
+    ].filter((channel) => !!channel);
+
+    channels.forEach((channel) => {
+      this.register.removeChannel(channel);
+    });
+
     let result = await Promise.allSettled(
-      channels.filter((channel) => !!channel).map((channel) => BOT.api.channelDelete(channel)),
+      channels.map((channel) => BOT.api.channelDelete(channel)),
     );
+
     result.forEach((result) => {
       if (result.status == 'rejected') {
         console.error(result.reason);

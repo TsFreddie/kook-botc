@@ -943,6 +943,79 @@ export interface UploadAssetParams {
 }
 
 /**
+ * Current user information (from /api/v3/user/me)
+ */
+export interface Me {
+  id: string;
+  username: string;
+  identify_num: string;
+  online: boolean;
+  os: string;
+  status: number;
+  avatar: string;
+  vip_avatar: string;
+  banner: string;
+  nickname: string;
+  roles: any[];
+  is_vip: boolean;
+  vip_amp: boolean;
+  bot: boolean;
+  bot_status: boolean;
+  tag_info: {
+    color: string;
+    bg_color: string;
+    text: string;
+  };
+  mobile_verified: boolean;
+  is_sys: boolean;
+  client_id: string;
+  verified: boolean;
+  mobile_prefix: string;
+  mobile: string;
+  invited_count: number;
+}
+
+/**
+ * Target user information (from /api/v3/user/view)
+ */
+export interface TargetUser {
+  id: string;
+  username: string;
+  nickname: string;
+  identify_num: string;
+  online: boolean;
+  os: string;
+  status: number;
+  avatar: string;
+  vip_avatar: string;
+  banner: string;
+  is_vip: boolean;
+  vip_amp: boolean;
+  bot: boolean;
+  mobile_verified: boolean;
+  roles: number[];
+  is_sys: boolean;
+  joined_at: number;
+  active_time: number;
+}
+
+/**
+ * Parameters for getting target user information
+ */
+export interface GetUserParams {
+  user_id: string;
+  guild_id?: string;
+}
+
+/**
+ * Bot online status response
+ */
+export interface BotOnlineStatus {
+  online: boolean;
+  online_os: string[];
+}
+
+/**
  * KOOK HTTP API Client
  */
 export class KookApiClient {
@@ -1464,6 +1537,44 @@ export class KookApiClient {
     formData.append('file', params.file);
 
     const response = await this.makeFormDataRequest<AssetUploadResponse>('/asset/create', formData);
+    return response.data;
+  }
+
+  /**
+   * Get current user information
+   */
+  async userMe(): Promise<Me> {
+    const response = await this.makeRequest<Me>('/user/me', 'GET');
+    return response.data;
+  }
+
+  /**
+   * Get target user information
+   */
+  async userView(params: GetUserParams): Promise<TargetUser> {
+    const response = await this.makeRequest<TargetUser>('/user/view', 'GET', params);
+    return response.data;
+  }
+
+  /**
+   * Set bot offline (webhook only)
+   */
+  async userOffline(): Promise<void> {
+    await this.makeRequest('/user/offline', 'POST');
+  }
+
+  /**
+   * Set bot online (webhook only)
+   */
+  async userOnline(): Promise<void> {
+    await this.makeRequest('/user/online', 'POST');
+  }
+
+  /**
+   * Get bot online status
+   */
+  async userGetOnlineStatus(): Promise<BotOnlineStatus> {
+    const response = await this.makeRequest<BotOnlineStatus>('/user/get-online-status', 'GET');
     return response.data;
   }
 }

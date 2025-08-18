@@ -3,6 +3,7 @@ export interface GameConfig {
   storytellerRoleId: number;
   roomCategoryId: string;
   gameCategoryId: string;
+  cottageCategoryId: string;
   templates: {
     storyteller: string;
     townsquare: string;

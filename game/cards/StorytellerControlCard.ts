@@ -32,19 +32,13 @@ class CardRenderer extends Card<Props> {
         met = ` (met)${state.storytellerId}(met)`;
         status =
           '小镇已就绪，在此发送的内容将转发给所有玩家\n(font)建议利用现在这个时机向玩家发送剧本和需要解释的规则等(font)[warning]';
-        buttons = [
-          { text: '⭐ 开始游戏', theme: 'info', value: '[st]GameStart' },
-          { text: '踢出玩家', theme: 'info', value: '[st]ListKick' },
-        ];
+        buttons = [{ text: '⭐ 开始游戏', theme: 'info', value: '[st]GameStart' }];
         break;
       case Phase.NIGHT:
         mode = `夜晚阶段`;
         status =
           '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)使用托梦功能为镇民提供信息，亦可前往小屋与镇民语音(font)[warning]';
-        buttons = [
-          { text: '🌅 黎明初生', theme: 'info', value: '[st]GameDay' },
-          { text: '前往小屋', theme: 'success', value: '[st]ListGoto' },
-        ];
+        buttons = [{ text: '🌅 黎明初生', theme: 'info', value: '[st]GameDay' }];
         break;
       case Phase.DAY:
         mode = `白天阶段 - 广场集会`;
@@ -52,7 +46,6 @@ class CardRenderer extends Card<Props> {
         buttons = [
           { text: '🌄 夜幕降临', theme: 'info', value: '[st]GameNight' },
           { text: '自由活动', theme: 'primary', value: '[st]GameRoaming' },
-          { text: '发起投票', theme: 'warning', value: '[st]ListVote' },
         ];
         break;
       case Phase.ROAMING:
@@ -62,7 +55,6 @@ class CardRenderer extends Card<Props> {
         buttons = [
           { text: '🌄 夜幕降临', theme: 'info', value: '[st]GameNight' },
           { text: '广场集会', theme: 'warning', value: '[st]GameDay' },
-          { text: '前往小屋', theme: 'success', value: '[st]ListGoto' },
         ];
         break;
     }
@@ -73,19 +65,6 @@ class CardRenderer extends Card<Props> {
     // Add phase-specific buttons if any
     if (buttons.length > 0) {
       buttonGroups.push(buttons);
-    }
-
-    // Always show utility buttons
-    buttonGroups.push([
-      { text: '状态', theme: 'primary', value: '[st]ListStatus' },
-      { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
-      { text: '换座', theme: 'info', value: '[st]ListSwap' },
-      { text: '禁言', theme: 'success', value: '[st]ListMute' },
-    ]);
-
-    // Only show restart button when restart is allowed (not in early states)
-    if (state.phase !== Phase.INITIALIZING && state.phase !== Phase.WAITING_FOR_STORYTELLER) {
-      buttonGroups.push([{ text: '重新开始', theme: 'danger', value: '[st]GameRestart' }]);
     }
 
     return {

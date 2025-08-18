@@ -1,6 +1,6 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
-import { $state, type ReactiveState } from './utils/binder';
+import { $state, type ReactiveState } from './utils/state-binder';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */

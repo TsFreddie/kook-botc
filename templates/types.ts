@@ -10,6 +10,7 @@ export type ActionButton = {
 };
 
 export type ActionGroup =
+  | []
   | [ActionButton]
   | [ActionButton, ActionButton]
   | [ActionButton, ActionButton, ActionButton]

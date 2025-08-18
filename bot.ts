@@ -185,6 +185,54 @@ const initialize = async () => {
 
   console.log(`🔄 已初始化鸦木布拉夫分组: ${gameCategory.id}`);
 
+  // 检查是否存在"小屋"分组，没有的话创建一个
+  let cottageCategory;
+
+  for (const channel of channels.items) {
+    if (channel.is_category && channel.name === '小屋') {
+      cottageCategory = channel;
+      break;
+    }
+  }
+
+  if (!cottageCategory) {
+    const category = await bot.api.channelCreate({
+      guild_id,
+      name: '小屋',
+      is_category: 1,
+    });
+    cottageCategory = category;
+  }
+
+  if (!cottageCategory) {
+    console.error('❌ 小屋分组初始化失败...');
+    process.exit(1);
+  }
+
+  // 检查小屋分组是否有禁止查看权限，若没有则禁止
+  const cottageCategoryDeny = Permission.VIEW_CHANNELS;
+  if (
+    !cottageCategory.permission_overwrites ||
+    !cottageCategory.permission_overwrites.some(
+      (overwrite) =>
+        overwrite.role_id == 0 && (overwrite.deny & cottageCategoryDeny) == cottageCategoryDeny,
+    )
+  ) {
+    const overwrite = cottageCategory.permission_overwrites?.find(
+      (overwrite) => overwrite.role_id == 0,
+    );
+
+    await bot.api.channelRoleUpdate({
+      channel_id: cottageCategory.id,
+      type: 'role_id',
+      value: '0',
+      deny: (overwrite?.deny || 0) | cottageCategoryDeny,
+      allow: overwrite?.allow || 0,
+    });
+  }
+
+  console.log(`🔄 已初始化小屋分组: ${cottageCategory.id}`);
+
   // 检查是否存在"游戏房间"分组，没有的话创建一个
   let roomCategory;
 
@@ -238,6 +286,7 @@ const initialize = async () => {
     storytellerRoleId: storytellerRoleId,
     roomCategoryId: roomCategory.id,
     gameCategoryId: gameCategory.id,
+    cottageCategoryId: cottageCategory.id,
     templates,
     assets,
   } satisfies GameConfig;

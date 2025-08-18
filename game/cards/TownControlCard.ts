@@ -48,6 +48,16 @@ class CardRenderer extends Card<Props> {
                 },
                 {
                   type: 'button',
+                  theme: 'warning',
+                  text: {
+                    type: 'plain-text',
+                    content: '重新开始',
+                  },
+                  click: 'return-val',
+                  value: '[st]GameRestart',
+                },
+                {
+                  type: 'button',
                   theme: 'danger',
                   text: {
                     type: 'plain-text',
