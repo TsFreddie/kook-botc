@@ -225,7 +225,7 @@ export class Router {
     }
 
     // 准备阶段退出的玩家将自动退出游戏
-    if (session.allowAutoLeave()) {
+    if (session.isPreparing()) {
       this.removeUserFromSession(session, user);
     }
   }

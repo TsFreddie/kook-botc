@@ -613,7 +613,7 @@ export class Session {
     }
 
     // 准备阶段加入语音的玩家会自动成为玩家
-    if (this.allowAutoLeave() && !this.internalHasPlayer(userId)) {
+    if (this.isPreparing() && !this.internalHasPlayer(userId)) {
       this.internalAddPlayer(userId);
 
       if (!this.greeted.has(userId)) {
@@ -658,7 +658,7 @@ export class Session {
     if (userId === this.storytellerId) return;
 
     // 准备阶段退出语音的玩家会自动退出玩家列表并退出游戏
-    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
+    if (this.isPreparing() && this.internalHasPlayer(userId)) {
       this.internalRemovePlayer(userId);
     }
   }
@@ -681,7 +681,7 @@ export class Session {
     if (this.destroyed) return;
 
     // 如果在准备阶段，退出的玩家会自动退出游戏
-    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
+    if (this.isPreparing() && this.internalHasPlayer(userId)) {
       this.internalRemovePlayer(userId);
     }
 
@@ -694,7 +694,7 @@ export class Session {
   /**
    * @returns true 如果目前的状态允许玩家自动退出
    */
-  allowAutoLeave() {
+  isPreparing() {
     return this.phase(Phase.PREPARING, Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING);
   }
 
