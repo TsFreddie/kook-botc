@@ -162,7 +162,10 @@ const initialize = async () => {
 
   // 检查鸦木布拉夫分组是否有禁止查看权限，若没有则禁止
   const gameCategoryDeny =
-    Permission.VIEW_CHANNELS | Permission.SEND_MESSAGES | Permission.ADD_REACTIONS;
+    Permission.VIEW_CHANNELS |
+    Permission.SEND_MESSAGES |
+    Permission.ADD_REACTIONS |
+    Permission.CREATE_INVITE;
   if (
     !gameCategory.permission_overwrites ||
     !gameCategory.permission_overwrites.some(
@@ -210,7 +213,7 @@ const initialize = async () => {
   }
 
   // 检查小屋分组是否有禁止查看权限，若没有则禁止
-  const cottageCategoryDeny = Permission.VIEW_CHANNELS;
+  const cottageCategoryDeny = Permission.VIEW_CHANNELS | Permission.CREATE_INVITE;
   if (
     !cottageCategory.permission_overwrites ||
     !cottageCategory.permission_overwrites.some(

@@ -90,8 +90,7 @@ export abstract class Card<T extends object> {
     if (value && typeof value === 'object') {
       const events = value._events_;
       if (events && events.addListener) {
-        const listener = (newValue: any) => {
-          (this.state as any)[key] = newValue;
+        const listener = () => {
           this.update();
         };
         events.addListener(listener);

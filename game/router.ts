@@ -1,3 +1,4 @@
+import { BOT } from '../bot';
 import { Session } from './session';
 
 /** 回话处理回调 */
@@ -5,6 +6,7 @@ export interface Register {
   addChannel: (channel: string) => void;
   removeChannel: (channel: string) => void;
   isPlayerJoined: (user: string) => boolean;
+  destroy: () => void;
 }
 
 interface SessionData {
@@ -44,18 +46,21 @@ export class Router {
     const session = new Session(storyteller, {
       addChannel: (channel) => {
         if (!this.sessions.has(session)) {
-          throw new Error('会话不存在');
+          return null;
         }
+
         if (this.channelMap.has(channel)) {
           throw new Error('频道已加入会话');
         }
+
         this.channelMap.set(channel, session);
         data.channels.add(channel);
       },
       removeChannel: (channel) => {
         if (!this.sessions.has(session)) {
-          throw new Error('会话不存在');
+          return null;
         }
+
         if (this.channelMap.get(channel) !== session) {
           throw new Error('频道不属于当前会话');
         }
@@ -64,9 +69,12 @@ export class Router {
       },
       isPlayerJoined: (user) => {
         if (!this.sessions.has(session)) {
-          throw new Error('会话不存在');
+          return false;
         }
         return data.users.has(user);
+      },
+      destroy: () => {
+        this.removeSession(session);
       },
     });
 
@@ -142,8 +150,8 @@ export class Router {
       throw new Error('会话不存在');
     }
 
-    // 通知 Renderer 进行销毁
-    session.renderer.destroy();
+    // 销毁会话
+    session.destroy();
 
     for (const user of data.users) {
       this.userMap.delete(user);
@@ -152,6 +160,53 @@ export class Router {
       this.channelMap.delete(channel);
     }
     this.sessions.delete(session);
+  }
+
+  /**
+   * 用户加入语音频道
+   */
+  systemUserJoinVoiceChannel(user: string, channel: string) {
+    const userSession = this.getSessionByUserId(user);
+    const channelSession = this.getSessionByChannelId(channel);
+
+    // 正在游戏中的玩家加入了另一个游戏的频道，踢出语音频道
+    if (channelSession && userSession && userSession !== channelSession) {
+      // 踢出玩家，不用在乎报错
+      BOT.api.channelKickout(channel, user).catch(console.error);
+      return;
+    }
+
+    // 用户已经在游戏里了，且加入的是自己游戏的频道
+    if (userSession && channelSession && userSession === channelSession) {
+      // 通知玩家进入语音频道
+      userSession.systemPlayerJoinVoiceChannel(user);
+      return;
+    }
+
+    // 频道不属于任何游戏，不用管
+    if (!channelSession) return;
+
+    // 用户不在游戏内，加入游戏
+    this.addUserToSession(channelSession, user);
+    channelSession.systemPlayerJoinVoiceChannel(user);
+  }
+
+  /**
+   * 用户退出语音频道
+   */
+  systemUserLeaveVoiceChannel(user: string) {
+    const session = this.getSessionByUserId(user);
+
+    // 用户不在游戏内，不用管
+    if (!session) return;
+
+    // 通知玩家退出语音频道
+    session.systemPlayerLeaveVoiceChannel(user);
+
+    // 准备阶段退出的玩家将自动退出游戏
+    if (session.allowAutoLeave()) {
+      this.removeUserFromSession(session, user);
+    }
   }
 
   /**

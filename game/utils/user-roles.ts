@@ -11,6 +11,7 @@ interface User {
  */
 export class UserRoles {
   private users: Map<string, User> = new Map();
+  private roleId: number | null = null;
 
   private tryCleanUpUser(userId: string) {
     const user = this.users.get(userId);

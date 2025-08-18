@@ -1,6 +1,7 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
 import { $state, CValue, type ReactiveState } from './utils/state';
+import { ROAMING_LOCATIONS } from './consts';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -60,8 +61,9 @@ export class Session {
 
   private players: PlayerState[] = [];
   private register: Register;
-  public readonly storytellerId: string;
+  private destroyed = false;
 
+  public readonly storytellerId: string;
   public readonly renderer: Renderer;
 
   constructor(storytellerId: string, register: Register) {
@@ -130,33 +132,59 @@ export class Session {
     return this.players.find((p) => p.id === user) !== undefined;
   }
 
+  private internalPlayerToCottage() {
+    // 移动所有玩家到小木屋
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    const players = this.players.map((p) => p.id);
+    players.forEach((p) => {
+      dynamicChannels.moveUserToCottage(p);
+    });
+  }
+
+  private internalPlayerToTownsquare() {
+    // 移动所有玩家到广场
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    const players = this.players.map((p) => p.id);
+    dynamicChannels.moveUsersToMainChannel(players);
+  }
+
   storytellerGameStart() {
     if (!this.phase(Phase.PREPARING)) return;
 
+    // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
+    this.internalPlayerToCottage();
   }
 
   storytellerGameDay() {
     if (!this.phase(Phase.NIGHT, Phase.ROAMING)) return;
 
     this.state.phase.set(Phase.DAY);
+    this.internalPlayerToTownsquare();
   }
 
   storytellerGameRoaming() {
     if (!this.phase(Phase.DAY)) return;
 
     this.state.phase.set(Phase.ROAMING);
+
+    // TODO：开放地点的查看权限
   }
 
   storytellerGameNight() {
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
 
     this.state.phase.set(Phase.NIGHT);
+    this.internalPlayerToCottage();
   }
 
   storytellerGameRestart() {
     // 初始化过程中不可重置游戏状态
-    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING)) return;
+    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
 
     this.state.phase.set(Phase.PREPARING);
 
@@ -167,21 +195,27 @@ export class Session {
         this.players.splice(i, 1);
       }
     }
+
+    // 将剩余玩家移动到广场
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    const players = this.players.map((p) => p.id);
+    dynamicChannels.moveUsersToMainChannel(players);
   }
 
   storytellerGameOpen() {
-    // TODO: 实现开放小镇功能
-    console.log('storytellerGameOpen called');
+    this.renderer.setOpen(true);
   }
 
   storytellerGameInviteOnly() {
-    // TODO: 实现邀请制功能
-    console.log('storytellerGameInviteOnly called');
+    this.renderer.setOpen(false);
   }
 
   storytellerGameDelete() {
-    // TODO: 实现删除游戏功能
-    console.log('storytellerGameDelete called');
+    if (this.destroyed) return;
+
+    this.register.destroy();
   }
 
   // List actions (placeholder implementations)
@@ -215,15 +249,44 @@ export class Session {
 
   // Player actions
   playerGameLeave(userId: string) {
-    // TODO: 实现玩家离开游戏功能
-    console.log('playerGameLeave called for user:', userId);
+    if (this.destroyed) return;
+
+    // 准备阶段退出语音的玩家会自动退出玩家列表并退出游戏
+    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
+      this.internalRemovePlayer(userId);
+    }
   }
 
-  systemPlayerJoinVoiceChannel(user: string) {
-    this.activeUsers.add(user);
+  // Location actions
+  locationSet(userId: string, locationId: number) {
+    if (this.destroyed) return;
+
+    if (userId !== this.storytellerId && !this.internalHasPlayer(userId)) {
+      // 只有说书人和玩家可以自由移动
+      // 旁观玩家只能留在城镇广场
+      return;
+    }
+
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    const location = ROAMING_LOCATIONS[locationId];
+    if (!location) return;
+
+    if (location.isMain) {
+      dynamicChannels.moveUsersToMainChannel([userId]);
+    } else {
+      dynamicChannels.moveUsersTo(location.name, [userId]);
+    }
+  }
+
+  systemPlayerJoinVoiceChannel(userId: string) {
+    if (this.destroyed) return;
+
+    this.activeUsers.add(userId);
 
     // 说书人加入语音频道时，进入准备阶段
-    if (user === this.storytellerId && this.phase(Phase.WAITING_FOR_STORYTELLER)) {
+    if (userId === this.storytellerId && this.phase(Phase.WAITING_FOR_STORYTELLER)) {
       this.state.phase.set(Phase.PREPARING);
 
       // 说书人不会加入游戏
@@ -231,24 +294,36 @@ export class Session {
     }
 
     // 准备阶段加入语音的玩家会自动成为玩家
-    if (
-      this.phase(Phase.PREPARING) &&
-      !this.internalHasPlayer(user) &&
-      user !== this.storytellerId
-    ) {
-      this.internalAddPlayer(user);
+    if (this.allowAutoLeave() && !this.internalHasPlayer(userId)) {
+      this.internalAddPlayer(userId);
     }
   }
 
-  systemPlayerLeaveVoiceChannel(user: string) {
-    this.activeUsers.delete(user);
+  systemPlayerLeaveVoiceChannel(userId: string) {
+    if (this.destroyed) return;
+
+    this.activeUsers.delete(userId);
 
     // 说书人不会退出游戏
-    if (user === this.storytellerId) return;
+    if (userId === this.storytellerId) return;
 
-    // 准备阶段退出语音的玩家会自动退出玩家列表
-    if (this.phase(Phase.PREPARING) && this.internalHasPlayer(user)) {
-      this.internalRemovePlayer(user);
+    // 准备阶段退出语音的玩家会自动退出玩家列表并退出游戏
+    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
+      this.internalRemovePlayer(userId);
     }
+  }
+
+  /**
+   * @returns true 如果目前的状态允许玩家自动退出
+   */
+  allowAutoLeave() {
+    return this.phase(Phase.PREPARING, Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING);
+  }
+
+  destroy() {
+    if (this.destroyed) return;
+
+    this.destroyed = true;
+    this.renderer.destroy();
   }
 }

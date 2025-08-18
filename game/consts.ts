@@ -8,15 +8,16 @@ export const ROAMING_LOCATIONS = [
   { name: '📚 缮写室', theme: 'warning' },
   { name: '🪨 十字口', theme: 'info' },
   { name: '🌲 小树林', theme: 'success' },
+  { name: '🏢 城镇广场', theme: 'danger', isMain: true },
 ];
 
-export const LOCATION_BUTTONS: ActionGroup = [];
+export const LOCATION_BUTTONS: ActionGroup[] = [];
 for (let i = 0; i < ROAMING_LOCATIONS.length; i += 4) {
   const buttons = ROAMING_LOCATIONS.slice(i, i + 4).map((value, index) => {
     return {
       text: value.name,
       theme: value.theme,
-      value: '[lc] ' + (i + index).toString(),
+      value: '[lc]' + (i + index).toString(),
     };
   });
   (LOCATION_BUTTONS as any).push(buttons);

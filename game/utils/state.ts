@@ -14,13 +14,11 @@
  * if (name.value) { ... }
  */
 
-export interface StateListener<T> {
-  (newValue: T): void;
-}
+export type StateListener = () => void;
 
 export interface StateEvents<T> {
-  addListener: (listener: StateListener<T>) => void;
-  removeListener: (listener: StateListener<T>) => void;
+  addListener: (listener: StateListener) => void;
+  removeListener: (listener: StateListener) => void;
 }
 
 /**
@@ -35,7 +33,7 @@ export interface ReactiveState<T> {
  */
 export class CValue<T> implements ReactiveState<T> {
   protected _value: T;
-  protected listeners = new Set<StateListener<T>>();
+  protected listeners = new Set<StateListener>();
 
   constructor(initialValue: T) {
     this._value = initialValue;
@@ -51,25 +49,25 @@ export class CValue<T> implements ReactiveState<T> {
     // Only notify if value actually changed
     if (this._value !== value || (typeof value === 'object' && value !== null)) {
       this._value = value;
-      this.notifyListeners(value);
+      this.notifyListeners();
     }
   }
 
   /** Get events interface for card integration */
   get _events_(): StateEvents<T> {
     return {
-      addListener: (listener: StateListener<T>) => {
+      addListener: (listener: StateListener) => {
         this.listeners.add(listener);
       },
-      removeListener: (listener: StateListener<T>) => {
+      removeListener: (listener: StateListener) => {
         this.listeners.delete(listener);
       },
     };
   }
 
-  protected notifyListeners(newValue: T): void {
+  protected notifyListeners(): void {
     for (const listener of this.listeners) {
-      listener(newValue);
+      listener();
     }
   }
 
@@ -99,19 +97,19 @@ export class CValue<T> implements ReactiveState<T> {
 export type CArray<T> = T[] & ReactiveState<T[]>;
 
 function makeCArray<T>(initialValue: T[] = []): CArray<T> {
-  const listeners = new Set<StateListener<T[]>>();
+  const listeners = new Set<StateListener>();
 
-  const notifyListeners = (newValue: T[]) => {
+  const notifyListeners = () => {
     for (const listener of listeners) {
-      listener(newValue);
+      listener();
     }
   };
 
   const events: StateEvents<T[]> = {
-    addListener: (listener: StateListener<T[]>) => {
+    addListener: (listener: StateListener) => {
       listeners.add(listener);
     },
-    removeListener: (listener: StateListener<T[]>) => {
+    removeListener: (listener: StateListener) => {
       listeners.delete(listener);
     },
   };
@@ -126,7 +124,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
           // Only notify if we're actually adding items
           if (items.length > 0) {
             const result = Array.prototype.push.apply(target, items);
-            notifyListeners(target);
+            notifyListeners();
             return result;
           }
           return target.length;
@@ -138,7 +136,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
           // Only notify if array is not empty
           if (target.length > 0) {
             const result = Array.prototype.pop.call(target);
-            notifyListeners(target);
+            notifyListeners();
             return result;
           }
           return undefined;
@@ -150,7 +148,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
           // Only notify if array is not empty
           if (target.length > 0) {
             const result = Array.prototype.shift.call(target);
-            notifyListeners(target);
+            notifyListeners();
             return result;
           }
           return undefined;
@@ -162,7 +160,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
           // Only notify if we're actually adding items
           if (items.length > 0) {
             const result = Array.prototype.unshift.apply(target, items);
-            notifyListeners(target);
+            notifyListeners();
             return result;
           }
           return target.length;
@@ -177,7 +175,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
 
           if (willDelete || willAdd) {
             const result = Array.prototype.splice.apply(target, [start, deleteCount, ...items]);
-            notifyListeners(target);
+            notifyListeners();
             return result;
           }
 
@@ -202,7 +200,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
         // Only notify if length actually changed
         if (oldLength !== value) {
           target.length = value;
-          notifyListeners(target);
+          notifyListeners();
         }
         return true;
       }
@@ -210,7 +208,7 @@ function makeCArray<T>(initialValue: T[] = []): CArray<T> {
       const oldValue = target[prop as keyof T[]];
       if (oldValue !== value || (typeof value === 'object' && value !== null)) {
         (target as any)[prop] = value;
-        notifyListeners(target);
+        notifyListeners();
       }
       return true;
     },
@@ -223,19 +221,19 @@ export type CRecord<K extends keyof any, T> = Record<K, T> & ReactiveState<T>;
  * Create a reactive record that behaves like a normal object but triggers updates
  */
 function makeCRecord<K extends keyof any, T>(initialValue: Record<K, T>): CRecord<K, T> {
-  const listeners = new Set<StateListener<Record<K, T>>>();
+  const listeners = new Set<StateListener>();
 
-  const notifyListeners = (newValue: Record<K, T>) => {
+  const notifyListeners = () => {
     for (const listener of listeners) {
-      listener(newValue);
+      listener();
     }
   };
 
   const events: StateEvents<Record<K, T>> = {
-    addListener: (listener: StateListener<Record<K, T>>) => {
+    addListener: (listener: StateListener) => {
       listeners.add(listener);
     },
-    removeListener: (listener: StateListener<Record<K, T>>) => {
+    removeListener: (listener: StateListener) => {
       listeners.delete(listener);
     },
   };
@@ -259,7 +257,7 @@ function makeCRecord<K extends keyof any, T>(initialValue: Record<K, T>): CRecor
       // Only notify if value actually changed
       if (oldValue !== value || (typeof value === 'object' && value !== null)) {
         (target as any)[prop] = value;
-        notifyListeners(target);
+        notifyListeners();
       }
       return true;
     },

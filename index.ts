@@ -4,8 +4,8 @@ import { ROUTER } from './game/router.ts';
 import { setGlobalErrorHandler } from './game/utils/error.ts';
 import { onError as onQueueError } from './game/utils/queue.ts';
 import { ApiMessageType } from './lib/api.ts';
-import { introCard, introCardAction, creatingInfo } from './templates/intro.ts';
-import { createdCard, existedCard } from './templates/created.ts';
+import { introCard } from './templates/intro.ts';
+import { createActionCard, createdCard, creatingInfo, existedCard } from './templates/create.ts';
 
 BOT.on('error', (error) => {
   console.error('💥 机器人错误:', error);
@@ -52,8 +52,8 @@ process.on('uncaughtException', (error) => {
 });
 
 process.on('unhandledRejection', (reason) => {
-  console.error('💥 未处理的Promise拒绝:', reason);
-  LOG(`💥 未处理的Promise拒绝：${reason instanceof Error ? reason.message : String(reason)}`);
+  console.error('💥 未处理的异步异常:', reason);
+  LOG(`💥 未处理的异步异常：${reason instanceof Error ? reason.message : String(reason)}`);
   shutdown();
 });
 
@@ -78,7 +78,7 @@ if (process.env.ADMIN_ID) {
     await BOT.api.messageCreate({
       target_id: event.target_id,
       type: ApiMessageType.CARD,
-      content: JSON.stringify(introCardAction),
+      content: JSON.stringify(createActionCard),
     });
   });
 }
@@ -154,6 +154,18 @@ BOT.onMessageBtnClick(async (event) => {
     return;
   }
 
+  if (value.startsWith('[lc]')) {
+    // 位置移动
+    const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
+    if (!session) return;
+
+    const location = Number(value.slice(4));
+    if (isNaN(location)) return;
+
+    session.locationSet(event.extra.body.user_id, location);
+    return;
+  }
+
   switch (value) {
     case 'createRoom':
       await createRoom(event.extra.body.user_id, event.extra.body.msg_id);
@@ -166,43 +178,12 @@ BOT.onJoinedChannel(async (event) => {
   const user = event.extra.body.user_id;
   const channel = event.extra.body.channel_id;
 
-  const userSession = ROUTER.getSessionByUserId(user);
-  const channelSession = ROUTER.getSessionByChannelId(channel);
-
-  // 用户已经在游戏里了，且加入的是自己游戏的频道
-  if (userSession && channelSession && userSession === channelSession) {
-    // 通知玩家进入语音频道
-    userSession.systemPlayerJoinVoiceChannel(user);
-    return;
-  }
-
-  // 频道不属于任何游戏，不用管
-  if (!channelSession) return;
-
-  // 正在游戏中的玩家加入了另一个游戏的频道，踢出语音频道
-  if (channelSession && userSession && userSession !== channelSession) {
-    await BOT.api.channelKickout(channel, user);
-    return;
-  }
-
-  // 用户不在游戏内，加入游戏
-  try {
-    ROUTER.addUserToSession(channelSession, user);
-    channelSession.systemPlayerJoinVoiceChannel(user);
-  } catch (error) {
-    console.error('加入游戏失败:', error);
-    // 如果加入失败，踢出语音频道
-    await BOT.api.channelKickout(channel, user);
-  }
+  ROUTER.systemUserJoinVoiceChannel(user, channel);
 });
 
 // 语音频道退出事件处理器
 BOT.onExitedChannel(async (event) => {
   const user = event.extra.body.user_id;
-  const channel = event.extra.body.channel_id;
 
-  const session = ROUTER.getSessionByChannelId(channel);
-  if (!session) return;
-
-  session.systemPlayerLeaveVoiceChannel(user);
+  ROUTER.systemUserLeaveVoiceChannel(user);
 });

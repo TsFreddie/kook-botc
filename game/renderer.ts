@@ -12,6 +12,7 @@ import TownsquareControlCard from './cards/TownsquareControlCard';
 import type { GameState } from './session';
 import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
+import { LatestQueue } from './utils/queue';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -47,7 +48,8 @@ export class Renderer {
 
   private roleId = -1;
   private rendererState = RendererState.None;
-  private dynamicChannels!: DynamicChannels;
+
+  public dynamicChannels?: DynamicChannels;
 
   // Public getters for accessing private properties
   get storytellerChannelId() {
@@ -65,6 +67,7 @@ export class Renderer {
   private readonly invite = $state('');
   private readonly open = $state(false);
   private readonly storytellerIdState = $state('');
+  private readonly openQueue = new LatestQueue();
 
   private cleanupCallback: (() => void) | null = null;
 
@@ -125,10 +128,6 @@ export class Renderer {
           name: this.name.value,
         })
       ).role_id;
-
-      // 为说书人赋予游戏角色与说书人角色
-      this.roles.grant(this.storytellerId, this.roleId);
-      this.roles.grant(this.storytellerId, GAME.storytellerRoleId);
 
       // 创建频道
       const results = await Promise.allSettled([
@@ -195,6 +194,10 @@ export class Renderer {
         })(),
       ]);
 
+      // 为说书人赋予游戏角色与说书人角色
+      this.roles.grant(this.storytellerId, this.roleId);
+      this.roles.grant(this.storytellerId, GAME.storytellerRoleId);
+
       this.rendererState = RendererState.Initialized;
     } catch (err) {
       console.error(err);
@@ -230,7 +233,7 @@ export class Renderer {
           channel_id: channel.id,
           type: 'user_id',
           value: this.storytellerId,
-          deny: Permission.SEND_MESSAGES,
+          deny: Permission.VIEW_CHANNELS,
         }),
       ]);
 
@@ -253,12 +256,28 @@ export class Renderer {
 
   /** 为用户授予游戏角色 */
   grantUserRole(userId: string) {
+    if (this.roleId == -1) return;
     this.roles.grant(userId, this.roleId);
   }
 
   /** 撤销用户的游戏角色 */
   revokeUserRole(userId: string) {
+    if (this.roleId == -1) return;
     this.roles.revoke(userId, this.roleId);
+  }
+
+  /** 切换开放 */
+  setOpen(open: boolean) {
+    if (this.open.value == open) return;
+    this.open.set(open);
+    this.openQueue.push(async () => {
+      await BOT.api.channelRoleUpdate({
+        channel_id: this._voiceChannelId,
+        type: 'role_id',
+        value: '0',
+        allow: open ? Permission.CONNECT_VOICE : 0,
+      });
+    });
   }
 
   /** 销毁渲染器，这会删除所有相关的角色与频道 */
@@ -272,6 +291,20 @@ export class Renderer {
       await new Promise<void>((resolve) => {
         this.cleanupCallback = resolve;
       });
+    }
+
+    // 停止队列
+    await this.openQueue.destroy(true);
+
+    // 卸载邀请链接
+    try {
+      const url = this.invite.value.split('/');
+      const code = url[url.length - 1];
+      if (code) {
+        await BOT.api.inviteDelete({ url_code: code, channel_id: this._voiceChannelId });
+      }
+    } catch (err) {
+      console.error(err);
     }
 
     // 优先销毁所有卡片队列，不再进行更新，并且等待正在更新的消息更新完毕
