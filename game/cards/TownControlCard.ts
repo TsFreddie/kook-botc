@@ -70,6 +70,28 @@ class CardRenderer extends Card<Props> {
               ],
             },
             {
+              type: 'divider',
+            },
+            {
+              type: 'section',
+              text: {
+                type: 'kmarkdown',
+                content:
+                  '(font)若玩家白天没能加入广场或晚上没能回到小屋(font)[secondary]\n(font)可以按这个按钮强制修正(font)[secondary]',
+              },
+              mode: 'right',
+              accessory: {
+                type: 'button',
+                theme: 'primary',
+                text: {
+                  type: 'plain-text',
+                  content: '频道修正',
+                },
+                click: 'return-val',
+                value: '[st]ForceVoiceChannel',
+              },
+            },
+            {
               type: 'context',
               elements: [
                 {

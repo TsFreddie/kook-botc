@@ -138,9 +138,7 @@ export class Session {
     if (!dynamicChannels) return;
 
     const players = this.players.map((p) => p.id);
-    players.forEach((p) => {
-      dynamicChannels.moveUserToCottage(p);
-    });
+    dynamicChannels.moveUsersToCottage(players);
   }
 
   private internalPlayerToTownsquare() {
@@ -149,6 +147,8 @@ export class Session {
     if (!dynamicChannels) return;
 
     const players = this.players.map((p) => p.id);
+    // 说书人也应该回到广场
+    players.push(this.storytellerId);
     dynamicChannels.moveUsersToMainChannel(players);
   }
 
@@ -162,6 +162,7 @@ export class Session {
 
   storytellerGameDay() {
     if (!this.phase(Phase.NIGHT, Phase.ROAMING)) return;
+    if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.DAY);
     this.internalPlayerToTownsquare();
@@ -169,6 +170,7 @@ export class Session {
 
   storytellerGameRoaming() {
     if (!this.phase(Phase.DAY)) return;
+    if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.ROAMING);
 
@@ -177,6 +179,7 @@ export class Session {
 
   storytellerGameNight() {
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
+    if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
@@ -185,6 +188,7 @@ export class Session {
   storytellerGameRestart() {
     // 初始化过程中不可重置游戏状态
     if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
+    if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.PREPARING);
 
@@ -202,6 +206,16 @@ export class Session {
 
     const players = this.players.map((p) => p.id);
     dynamicChannels.moveUsersToMainChannel(players);
+  }
+
+  storytellerForceVoiceChannel() {
+    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    if (this.phase(Phase.NIGHT)) {
+      this.internalPlayerToCottage();
+    } else {
+      this.internalPlayerToTownsquare();
+    }
   }
 
   storytellerGameOpen() {
@@ -274,9 +288,11 @@ export class Session {
     if (!location) return;
 
     if (location.isMain) {
-      dynamicChannels.moveUsersToMainChannel([userId]);
+      dynamicChannels.roamUserToMainChannel(userId);
+    } else if (location.isCottage) {
+      dynamicChannels.roamUserToCottage(userId);
     } else {
-      dynamicChannels.moveUsersTo(location.name, [userId]);
+      dynamicChannels.roamUserTo(location.name, userId);
     }
   }
 
