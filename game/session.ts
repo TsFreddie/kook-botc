@@ -1,6 +1,6 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
-import { $state, CValue, type CArray, type ReactiveState } from './utils/state';
+import { $state, CValue } from './utils/state';
 import { CIRCLED_NUMBERS, ROAMING_LOCATIONS } from './consts';
 import { ApiMessageType } from '../lib/api';
 import { textCard } from '../templates/text';
@@ -43,6 +43,8 @@ export enum ListMode {
   SPECTATE,
   /** 禁言 */
   MUTE,
+  /** 踢出 */
+  KICK,
   /** 上麦 */
   SPOTLIGHT,
   /** 托梦 */
@@ -57,6 +59,7 @@ export interface ListPlayerItem {
   type: 'player' | 'spectator' | 'storyteller';
   id: string;
   info: string;
+  joined: boolean;
   selected: boolean;
 }
 
@@ -244,10 +247,13 @@ export class Session {
    */
   private updatePlayerList() {
     // 玩家顺序：按槽位游戏玩家 -> 说书人 -> 旁观玩家
+    const joinedPlayers = new Set(this.register.getJoinedPlayers());
+
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
       return {
         type: 'player',
         id: p.id,
+        joined: joinedPlayers.has(p.id),
         info: `(font)${CIRCLED_NUMBERS[index] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'body' : 'tips'}]${SEP}${statusToColumns(p.status)}${SEP}(met)${p.id}(met)`,
         selected: this.listSelection.has(p.id),
       };
@@ -256,14 +262,15 @@ export class Session {
     players.push({
       type: 'storyteller',
       id: this.storytellerId,
+      joined: joinedPlayers.has(this.storytellerId),
       info: `(font)说书人(font)[${this.townsquareUsers.has(this.storytellerId) ? 'warning' : 'tips'}]${SEP}(met)${this.storytellerId}(met)`,
       selected: this.listSelection.has(this.storytellerId),
     });
 
-    // 添加旁观玩家（在语音频道但不在游戏中的用户）
+    // 添加旁观玩家（有会话权限但不在游戏中的用户）
     const playerIds = new Set(this.players.map((p) => p.id));
     const spectators: string[] = [];
-    for (const userId of this.register.getJoinedPlayers()) {
+    for (const userId of joinedPlayers) {
       if (userId !== this.storytellerId && !playerIds.has(userId)) {
         spectators.push(userId);
       }
@@ -274,6 +281,7 @@ export class Session {
       players.push({
         type: 'spectator',
         id: userId,
+        joined: true,
         info: `(font)旁观者(font)[tips]${SEP}(met)${userId}(met)`,
         selected: this.listSelection.has(userId),
       });
@@ -328,7 +336,7 @@ export class Session {
     if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
-    this.state.phase.set(Phase.PREPARING);
+    // TODO: 如果重新开始时，玩家已经离开了
 
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
@@ -344,6 +352,8 @@ export class Session {
 
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.hideCottages();
+
+    this.state.phase.set(Phase.PREPARING);
   }
 
   storytellerForceVoiceChannel() {
@@ -388,6 +398,12 @@ export class Session {
     this.updatePlayerList();
   }
 
+  storytellerListKick() {
+    this.listSelection.clear();
+    this.state.listMode.set(ListMode.KICK);
+    this.updatePlayerList();
+  }
+
   storytellerSelectStatus(userId: string) {
     if (this.state.listMode.value !== ListMode.STATUS) return;
 
@@ -412,32 +428,26 @@ export class Session {
   storytellerSelectSwap(userId: string) {
     if (this.state.listMode.value !== ListMode.SWAP) return;
 
-    // Only allow selecting players for swapping
     if (!this.internalHasPlayer(userId)) return;
 
     if (this.listSelection.has(userId)) {
-      // Deselect if already selected
       this.listSelection.delete(userId);
     } else {
-      // Select the player
       this.listSelection.add(userId);
     }
 
-    // If we have exactly 2 players selected, perform the swap
     if (this.listSelection.size === 2) {
       const selectedPlayers = Array.from(this.listSelection);
       const player1Index = this.players.findIndex((p) => p.id === selectedPlayers[0]);
       const player2Index = this.players.findIndex((p) => p.id === selectedPlayers[1]);
 
       if (player1Index !== -1 && player2Index !== -1) {
-        // Swap the players in the array
         [this.players[player1Index], this.players[player2Index]] = [
           this.players[player2Index]!,
           this.players[player1Index]!,
         ];
       }
 
-      // Clear selection and return to status mode
       this.listSelection.clear();
     }
 
@@ -447,18 +457,24 @@ export class Session {
   storytellerSelectSpectate(userId: string) {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
-    // Don't allow spectating the storyteller
     if (userId === this.storytellerId) return;
 
     if (this.internalHasPlayer(userId)) {
-      // Remove player from game (make them a spectator)
       this.internalRemovePlayer(userId);
     } else if (this.townsquareUsers.has(userId)) {
-      // Add spectator back to game (they must be in voice channel)
       this.internalAddPlayer(userId);
     }
 
     this.updatePlayerList();
+  }
+
+  storytellerSelectKick(userId: string) {
+    if (this.state.listMode.value !== ListMode.KICK) return;
+
+    // 不可以踢出说书人
+    if (userId === this.storytellerId) return;
+
+    this.register.kick(userId);
   }
 
   // Location actions

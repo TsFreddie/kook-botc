@@ -7,6 +7,7 @@ export interface Register {
   removeChannel: (channel: string) => void;
   isUserJoined: (user: string) => boolean;
   getJoinedPlayers: () => string[];
+  kick: (userId: string) => void;
   destroy: () => void;
 }
 
@@ -80,6 +81,9 @@ export class Router {
       getJoinedPlayers: () => {
         return [...data.users.values()];
       },
+      kick: (user) => {
+        this.kick(user, session);
+      },
     });
 
     // 说书人始终属于其创建的会话
@@ -102,7 +106,13 @@ export class Router {
       throw new Error('会话不存在');
     }
 
-    if (this.userMap.has(userId)) {
+    const userSession = this.userMap.get(userId);
+    if (userSession === session) {
+      // 已经在这个会话中了
+      return;
+    }
+
+    if (userSession) {
       throw new Error('用户已属于其他会话');
     }
 
@@ -123,8 +133,8 @@ export class Router {
       throw new Error('会话不存在');
     }
 
-    data.users.delete(userId);
-    this.userMap.delete(userId);
+    const removed = data.users.delete(userId) || this.userMap.delete(userId);
+    if (!removed) return;
 
     // 通知渲染器更新用户角色
     session.renderer.revokeUserRole(userId);
@@ -215,15 +225,25 @@ export class Router {
     }
   }
 
+  kick(user: string, session: Session) {
+    const userSession = this.getSessionByUserId(user);
+    if (!userSession || userSession !== session) return;
+
+    userSession.kickoutUser(user);
+    this.removeUserFromSession(session, user);
+  }
+
   /**
-   * 用户点击离开游戏，会尝试将用户从当前语音频道中移除
+   * 用户点击离开游戏，离开时会尝试将用户从当前语音频道中移除
    */
   actionGameLeave(user: string, channel: string) {
-    const session = this.getSessionByUserId(user);
-    if (!session) return;
+    const userSession = this.getSessionByUserId(user);
+    if (!userSession) return;
 
-    session.kickoutUser(user);
-    this.removeUserFromSession(session, user);
+    const channelSession = this.getSessionByChannelId(channel);
+    if (userSession !== channelSession) return;
+
+    this.kick(user, userSession);
   }
 
   /**

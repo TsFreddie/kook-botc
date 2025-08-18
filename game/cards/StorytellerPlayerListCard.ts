@@ -46,9 +46,10 @@ class CardRenderer extends Card<Props> {
           { text: '换座', theme: 'primary', value: '[st]ListSwap' },
           { text: '旁观', theme: 'info', value: '[st]ListSpectate' },
           { text: '禁言', theme: 'success', value: '[st]ListMute' },
-          { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
+          { text: '踢出', theme: 'danger', value: '[st]ListKick' },
         ]);
         groups.push([
+          { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
           { text: '提名', theme: 'danger', value: '[st]ListNominate' },
           { text: '投票', theme: 'primary', value: '[st]LiteVote' },
         ]);
@@ -82,6 +83,14 @@ class CardRenderer extends Card<Props> {
         theme = 'success';
         action = { text: '禁言', theme: 'danger' };
         value = 'Mute';
+        break;
+
+      case ListMode.KICK:
+        status = '**踢出玩家**\n点击按钮踢出玩家';
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        theme = 'danger';
+        action = { text: '踢出', theme: 'danger' };
+        value = 'Kick';
         break;
 
       case ListMode.SPOTLIGHT:
@@ -162,6 +171,13 @@ class CardRenderer extends Card<Props> {
         case ListMode.MUTE:
           if (item.selected) {
             action = { text: '取消禁言', theme: 'secondary' };
+          }
+          break;
+
+        case ListMode.KICK:
+          // 说书人和本来就不在游戏内的玩家不能被踢
+          if (item.type === 'storyteller' || !item.joined) {
+            action = 'none';
           }
           break;
 
