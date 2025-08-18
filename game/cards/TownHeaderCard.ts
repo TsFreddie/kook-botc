@@ -1,8 +1,9 @@
 import { $card, Card } from '../utils/card';
+import type { CValue } from '../utils/state';
 
 interface Props {
-  name: string;
-  invite: string;
+  name: CValue<string>;
+  invite: CValue<string>;
 }
 
 /**
@@ -21,14 +22,14 @@ class CardRenderer extends Card<Props> {
               type: 'section',
               text: {
                 type: 'kmarkdown',
-                content: `**(font)${state.name}(font)[warning]**`,
+                content: `**(font)${state.name.value}(font)[warning]**`,
               },
             },
             {
               type: 'section',
               text: {
                 type: 'kmarkdown',
-                content: `> (font)游戏过程中请始终查看该频道，否则可能会错过重要消息(font)[secondary]\n> (font)若不小心退出了语音，可以点(font)[secondary][这里](${state.invite}})(font)重新进入城镇广场语音(font)[secondary]`,
+                content: `> (font)游戏过程中请始终查看该频道，否则可能会错过重要消息(font)[secondary]\n> (font)若不小心退出了语音，可以点(font)[secondary][这里](${state.invite.value}})(font)重新进入城镇广场语音(font)[secondary]`,
               },
             },
             {

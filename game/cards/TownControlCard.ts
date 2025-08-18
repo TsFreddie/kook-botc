@@ -1,9 +1,10 @@
 import { $card, Card } from '../utils/card';
+import type { CValue } from '../utils/state';
 
 interface Props {
-  name: string;
-  invite: string;
-  open: boolean;
+  name: CValue<string>;
+  invite: CValue<string>;
+  open: CValue<boolean>;
 }
 
 /**
@@ -22,7 +23,7 @@ class CardRenderer extends Card<Props> {
               type: 'section',
               text: {
                 type: 'kmarkdown',
-                content: `**(font)${state.name}(font)[warning]** - 邀请连接：[${state.invite}](${state.invite})`,
+                content: `**(font)${state.name.value}(font)[warning]** - 邀请连接：[${state.invite.value}](${state.invite.value})`,
               },
             },
             {
@@ -38,13 +39,13 @@ class CardRenderer extends Card<Props> {
               elements: [
                 {
                   type: 'button',
-                  theme: state.open ? 'warning' : 'info',
+                  theme: state.open.value ? 'warning' : 'info',
                   text: {
                     type: 'plain-text',
-                    content: state.open ? '取消开放' : '开放小镇',
+                    content: state.open.value ? '取消开放' : '开放小镇',
                   },
                   click: 'return-val',
-                  value: state.open ? '[st]GameInviteOnly' : '[st]GameOpen',
+                  value: state.open.value ? '[st]GameInviteOnly' : '[st]GameOpen',
                 },
                 {
                   type: 'button',
@@ -73,7 +74,7 @@ class CardRenderer extends Card<Props> {
               elements: [
                 {
                   type: 'plain-text',
-                  content: state.open ? '目前小镇对所有人开放' : '目前小镇只能通过邀请加入',
+                  content: state.open.value ? '目前小镇对所有人开放' : '目前小镇只能通过邀请加入',
                 },
               ],
             },

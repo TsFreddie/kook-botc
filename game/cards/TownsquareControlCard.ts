@@ -1,10 +1,11 @@
 import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { Phase } from '../session';
+import type { CValue } from '../utils/state';
 
 interface Props {
-  invite: string;
-  phase: Phase;
+  invite: CValue<string>;
+  phase: CValue<Phase>;
 }
 
 /**
@@ -15,10 +16,10 @@ class CardRenderer extends Card<Props> {
     let status: string = '';
     let mode: string = '';
     let buttons: any[] = [];
-    let icon = state.phase === Phase.NIGHT ? '🌠' : '🌅';
-    let image = GAME.assets[state.phase === Phase.NIGHT ? 'night' : 'day'];
+    let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
+    let image = GAME.assets[state.phase.value === Phase.NIGHT ? 'night' : 'day'];
 
-    switch (state.phase) {
+    switch (state.phase.value) {
       case Phase.WAITING_FOR_STORYTELLER:
         mode = `等待说书人`;
         status = '等待说书人加入游戏';
@@ -56,7 +57,7 @@ class CardRenderer extends Card<Props> {
       content: JSON.stringify({
         image,
         status: `**(font)${icon} 城镇广场(font)[warning]** (font)${mode}(font)[secondary]\n${status}`,
-        invite: state.invite,
+        invite: state.invite.value,
         groups: buttonGroups.length > 0 ? buttonGroups : undefined,
       }),
       template_id: GAME.templates.townsquare,

@@ -1,6 +1,6 @@
 import { BOT, GAME } from '../bot';
 import { ApiChannelType, Permission, VoiceQuality } from '../lib/api';
-import { $state } from './utils/state-binder';
+import { $state } from './utils/state';
 import type { Register } from './router';
 import { UserRoles } from './utils/user-roles';
 import { reportGlobalError } from './utils/error';
@@ -34,7 +34,7 @@ export enum RendererState {
  * 渲染器负责频道状态管理
  */
 export class Renderer {
-  public readonly name;
+  public readonly name = $state('');
 
   private _storytellerChannelId = '';
   private _townsquareChannelId = '';
@@ -64,6 +64,7 @@ export class Renderer {
 
   private readonly invite = $state('');
   private readonly open = $state(false);
+  private readonly storytellerIdState = $state('');
 
   private cleanupCallback: (() => void) | null = null;
 
@@ -72,34 +73,36 @@ export class Renderer {
     private register: Register,
     private state: GameState,
   ) {
-    this.name = `小镇 ${Math.floor(Math.random() * 100000)
+    const townName = `小镇 ${Math.floor(Math.random() * 100000)
       .toString()
       .padStart(5, '0')}`;
+    this.name.set(townName);
+    this.storytellerIdState.set(storytellerId);
 
     // 配置动态卡片
     this.cards = {
       storyteller: [
         TownControlCard({
           name: this.name,
-          invite: this.invite.value,
-          open: this.open.value,
+          invite: this.invite,
+          open: this.open,
         }),
         StorytellerControlCard({
           name: this.name,
-          invite: this.invite.value,
-          phase: this.state.phase.value,
-          storytellerId: this.storytellerId,
+          invite: this.invite,
+          phase: this.state.phase,
+          storytellerId: this.storytellerIdState,
         }),
       ],
 
       townsquare: [
         TownHeaderCard({
           name: this.name,
-          invite: this.invite.value,
+          invite: this.invite,
         }),
         TownsquareControlCard({
-          invite: this.invite.value,
-          phase: this.state.phase.value,
+          invite: this.invite,
+          phase: this.state.phase,
         }),
       ],
     };
@@ -119,7 +122,7 @@ export class Renderer {
       this.roleId = (
         await BOT.api.roleCreate({
           guild_id: GAME.guildId,
-          name: this.name,
+          name: this.name.value,
         })
       ).role_id;
 
@@ -145,7 +148,7 @@ export class Renderer {
           this._voiceChannelId = (
             await BOT.api.channelCreate({
               guild_id: GAME.guildId,
-              name: `‣ ${this.name}`,
+              name: `‣ ${this.name.value}`,
               type: ApiChannelType.VOICE,
               voice_quality: VoiceQuality.HIGH,
               limit_amount: 20,

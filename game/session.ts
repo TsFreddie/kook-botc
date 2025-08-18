@@ -1,6 +1,6 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
-import { $state, type ReactiveState } from './utils/state-binder';
+import { $state, CValue, type ReactiveState } from './utils/state';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -39,7 +39,7 @@ export enum ListMode {
 
 /** 游戏状态 */
 export interface GameState {
-  phase: ReactiveState<Phase>;
+  phase: CValue<Phase>;
   voting: boolean;
 }
 

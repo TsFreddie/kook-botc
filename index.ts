@@ -102,7 +102,7 @@ const createRoom = async (user: string, message: string) => {
     await BOT.api.messageUpdate({
       msg_id: message,
       content: JSON.stringify(
-        createdCard(session.renderer.name, session.renderer.storytellerChannelId),
+        createdCard(session.renderer.name.value, session.renderer.storytellerChannelId),
       ),
       temp_target_id: user,
     });
@@ -111,7 +111,7 @@ const createRoom = async (user: string, message: string) => {
     await BOT.api.messageUpdate({
       msg_id: message,
       content: JSON.stringify(
-        existedCard(session.renderer.name, session.renderer.storytellerChannelId),
+        existedCard(session.renderer.name.value, session.renderer.storytellerChannelId),
       ),
       temp_target_id: user,
     });

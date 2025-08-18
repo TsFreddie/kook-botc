@@ -1,12 +1,13 @@
 import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { Phase } from '../session';
+import type { CValue } from '../utils/state';
 
 interface Props {
-  name: string;
-  invite: string;
-  phase: Phase;
-  storytellerId: string;
+  name: CValue<string>;
+  invite: CValue<string>;
+  phase: CValue<Phase>;
+  storytellerId: CValue<string>;
 }
 
 /**
@@ -18,18 +19,18 @@ class CardRenderer extends Card<Props> {
     let mode: string = '';
     let buttons: any[] = [];
     let met: string = '';
-    let icon = state.phase === Phase.NIGHT ? '🌠' : '🌅';
-    let image = GAME.assets[state.phase === Phase.NIGHT ? 'night' : 'day'];
+    let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
+    let image = GAME.assets[state.phase.value === Phase.NIGHT ? 'night' : 'day'];
 
-    switch (state.phase) {
+    switch (state.phase.value) {
       case Phase.WAITING_FOR_STORYTELLER:
         mode = `等待说书人`;
-        status = `已创建${state.name}，请说书人使用[邀请链接](${state.invite})加入语音\n(font)加入后请回到这个频道进行后续操作(font)[warning]`;
+        status = `已创建${state.name.value}，请说书人使用[邀请链接](${state.invite.value})加入语音\n(font)加入后请回到这个频道进行后续操作(font)[warning]`;
         buttons = [];
         break;
       case Phase.PREPARING:
         mode = `准备阶段`;
-        met = ` (met)${state.storytellerId}(met)`;
+        met = ` (met)${state.storytellerId.value}(met)`;
         status =
           '小镇已就绪，在此发送的内容将转发给所有玩家\n(font)建议利用现在这个时机向玩家发送剧本和需要解释的规则等(font)[warning]';
         buttons = [{ text: '⭐ 开始游戏', theme: 'info', value: '[st]GameStart' }];
