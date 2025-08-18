@@ -547,15 +547,7 @@ export type UserEventHandler = (event: UserEvent) => void | Promise<void>;
 export type GuildEventHandler = (event: GuildEvent) => void | Promise<void>;
 export type ChannelEventHandler = (event: ChannelEvent) => void | Promise<void>;
 
-/**
- * Event filter function type
- */
-export type EventFilter = (event: KookEvent) => boolean | Promise<boolean>;
 
-/**
- * Event middleware function type
- */
-export type EventMiddleware = (event: KookEvent, next: () => Promise<void>) => Promise<void>;
 
 // Specific event handlers
 export type JoinedChannelHandler = (event: JoinedChannelEvent) => void | Promise<void>;
@@ -573,10 +565,6 @@ export class TypedEventManager extends EventTarget {
   private parser: EventParser;
   private debug: boolean;
   private onError?: (error: Error) => void;
-
-  // Filters and middleware
-  private filters: EventFilter[] = [];
-  private middleware: EventMiddleware[] = [];
 
   constructor(debug: boolean = false) {
     super();
@@ -601,16 +589,8 @@ export class TypedEventManager extends EventTarget {
     }
 
     try {
-      // Apply filters
-      if (!(await this.applyFilters(event))) {
-        return;
-      }
-
-      // Apply middleware and handle event
-      await this.applyMiddleware(event, async () => {
-        // Emit events concurrently - no need to wait for handlers
-        this.emitEvent(event);
-      });
+      // Emit events concurrently - no need to wait for handlers
+      this.emitEvent(event);
     } catch (error) {
       if (this.debug) {
         console.error('[TypedEventManager] Error handling event:', error);
@@ -766,76 +746,5 @@ export class TypedEventManager extends EventTarget {
     return this.parser;
   }
 
-  // Filter and middleware methods
-  /**
-   * Add event filter
-   */
-  addFilter(filter: EventFilter): void {
-    this.filters.push(filter);
-  }
 
-  /**
-   * Add event middleware
-   */
-  addMiddleware(middleware: EventMiddleware): void {
-    this.middleware.push(middleware);
-  }
-
-  /**
-   * Apply all filters to an event
-   */
-  private async applyFilters(event: KookEvent): Promise<boolean> {
-    for (const filter of this.filters) {
-      try {
-        const result = await filter(event);
-        if (!result) {
-          if (this.debug) {
-            console.log('[TypedEventManager] Event filtered out');
-          }
-          return false;
-        }
-      } catch (error) {
-        if (this.debug) {
-          console.error('[TypedEventManager] Filter error:', error);
-        }
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /**
-   * Apply middleware chain
-   */
-  private async applyMiddleware(event: KookEvent, handler: () => Promise<void>): Promise<void> {
-    let index = 0;
-
-    const next = async (): Promise<void> => {
-      if (index >= this.middleware.length) {
-        await handler();
-        return;
-      }
-
-      const middleware = this.middleware[index++];
-      if (middleware) {
-        await middleware(event, next);
-      }
-    };
-
-    await next();
-  }
-
-  /**
-   * Remove all filters
-   */
-  clearFilters(): void {
-    this.filters = [];
-  }
-
-  /**
-   * Remove all middleware
-   */
-  clearMiddleware(): void {
-    this.middleware = [];
-  }
 }

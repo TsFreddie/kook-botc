@@ -1554,33 +1554,7 @@ export class KookClient extends KookEventEmitter {
     return this.eventManager.getParser();
   }
 
-  /**
-   * Add event filter
-   */
-  addEventFilter(filter: (event: any) => boolean | Promise<boolean>): void {
-    this.eventManager.addFilter(filter);
-  }
 
-  /**
-   * Add event middleware
-   */
-  addEventMiddleware(middleware: (event: any, next: () => Promise<void>) => Promise<void>): void {
-    this.eventManager.addMiddleware(middleware);
-  }
-
-  /**
-   * Clear all event filters
-   */
-  clearEventFilters(): void {
-    this.eventManager.clearFilters();
-  }
-
-  /**
-   * Clear all event middleware
-   */
-  clearEventMiddleware(): void {
-    this.eventManager.clearMiddleware();
-  }
 }
 
 /**
