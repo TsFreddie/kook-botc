@@ -7,6 +7,7 @@ export interface GameConfig {
   templates: {
     storyteller: string;
     townsquare: string;
+    players: string;
   };
   assets: Record<string, string>;
 }

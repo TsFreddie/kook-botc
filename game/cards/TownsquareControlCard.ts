@@ -2,7 +2,7 @@ import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { Phase } from '../session';
 import type { CValue } from '../utils/state';
-import type { ActionButton, ActionGroup } from '../../templates/types';
+import type { ActionGroup } from '../../templates/types';
 import { LOCATION_BUTTONS } from '../consts';
 
 interface Props {
@@ -25,7 +25,7 @@ class CardRenderer extends Card<Props> {
     switch (state.phase.value) {
       case Phase.WAITING_FOR_STORYTELLER:
         mode = `等待说书人`;
-        status = '等待说书人加入游戏';
+        status = '正在等待说书人加入游戏';
         break;
       case Phase.PREPARING:
         mode = `准备阶段`;
@@ -33,11 +33,11 @@ class CardRenderer extends Card<Props> {
         break;
       case Phase.NIGHT:
         mode = `夜晚阶段`;
-        status = '夜幕降临，镇民们回到各自的小屋休息';
+        status = '夜幕降临，你回到了自己的小屋';
         break;
       case Phase.DAY:
         mode = `白天阶段 - 广场集会`;
-        status = '镇民们聚集在广场中进行讨论\n(font)可以自由发言和讨论(font)[info]';
+        status = '你和其他镇民们聚集在城镇广场\n(font)可以自由发言和讨论(font)[info]';
         break;
       case Phase.ROAMING:
         mode = `白天阶段 - 自由活动`;

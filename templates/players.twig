@@ -1,0 +1,121 @@
+[
+  {
+    "type": "card",
+    "theme": "{{ data.theme }}",
+    "size": "lg",
+    "modules": [
+      {
+        "type": "section",
+        "text": {
+          "type": "kmarkdown",
+          "content": "**玩家列表**"
+        }
+      }
+{% if data.countdown %}
+      ,{
+        "type": "countdown",
+        "mode": "second",
+        "startTime": {{ data.countdown.start }},
+        "endTime": {{ data.countdown.end }}
+      }
+{% endif %}
+{% if data.groups and data.groups|length > 0 %}
+      ,{
+        "type": "divider"
+      }
+    {% for group in data.groups %}
+      ,{
+        "type": "action-group",
+        "elements": [
+        {% for button in group %}
+            {% if not loop.first %}
+          ,
+            {% endif %}
+          {
+            "type": "button",
+            "theme": "{{ button.theme }}",
+            "text": {
+              "type": "plain-text",
+              "content": "{{ button.text }}"
+            },
+            "click": "return-val",
+            "value": "{{ button.value }}"
+          }
+        {% endfor %}
+        ]
+      }
+    {% endfor %}
+{% endif %}
+      ,{
+        "type": "context",
+        "elements": [
+          {
+            "type": "kmarkdown",
+            "content": "{{ data.status|json_escape }}"
+          }
+        ]
+      }
+{% if data.players and data.players|length > 0 %}
+      ,{
+        "type": "divider"
+      }
+      {% for player in data.players %}
+      ,{
+        "type": "section",
+        "text": {
+          "type": "kmarkdown",
+          "content": "{{ player.info|json_escape }}"
+        }
+        {% if player.action %}
+          {% if player.action != "none" %}
+            ,"mode": "right",
+            "accessory": {
+              "type": "button",
+              "theme": "{{ player.action.theme }}",
+              "text": {
+                "type": "plain-text",
+                "content": "{{ player.action.text }}"
+              },
+              "click": "return-val",
+              "value": "{{ data.prefix }}|{{ player.id }}"
+            }
+          {% else %}
+            ,"mode": "right",
+            "accessory": {
+              "type": "button",
+              "theme": "secondary",
+              "text": {
+                "type": "plain-text",
+                "content": "　"
+              }
+            }
+          {% endif %}
+        {% elseif data.action %}
+        ,"mode": "right",
+        "accessory": {
+          "type": "button",
+          "theme": "{{ data.action.theme }}",
+          "text": {
+            "type": "plain-text",
+            "content": "{{ data.action.text }}"
+          },
+          "click": "return-val",
+          "value": "{{ data.prefix }}|{{ player.id }}"
+        }
+        {% else %}
+        ,"mode": "right",
+        "accessory": {
+          "type": "button",
+          "theme": "secondary",
+          "text": {
+            "type": "plain-text",
+            "content": "　"
+          }
+        }
+        {% endif %}
+      }
+    {% endfor %}
+{% endif %}
+    ]
+  }
+]

@@ -4,6 +4,7 @@ import { storytellerTwig } from './templates/storyteller.ts';
 import { townsqareTwig } from './templates/townsquare.ts';
 import type { GameConfig } from './types.ts';
 import { Permission } from './lib/api.ts';
+import { playersTwig } from './templates/players.ts';
 
 dotenv({ quiet: true });
 
@@ -113,6 +114,7 @@ const initialize = async () => {
   const templates = {
     storyteller: await checkOrCreateTwig('storyteller', storytellerTwig),
     townsquare: await checkOrCreateTwig('townsquare', townsqareTwig),
+    players: await checkOrCreateTwig('players', playersTwig),
   };
 
   console.log(`🔄 已初始化消息模版`);

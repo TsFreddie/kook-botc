@@ -166,6 +166,22 @@ BOT.onMessageBtnClick(async (event) => {
     return;
   }
 
+  if (value.startsWith('[sp]')) {
+    // 说书人玩家列表操作
+    const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
+    if (!session) return;
+
+    const [action, userId] = value.slice(4).split('|');
+    if (!action || !userId) return;
+
+    const handlerName = 'storytellerSelect' + action;
+    const handler = (session as any)[handlerName];
+    if (handler && typeof handler === 'function') {
+      await handler.call(session, userId);
+    }
+    return;
+  }
+
   switch (value) {
     case 'createRoom':
       await createRoom(event.extra.body.user_id, event.extra.body.msg_id);

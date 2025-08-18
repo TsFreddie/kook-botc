@@ -62,7 +62,7 @@ class CardRenderer extends Card<Props> {
                   theme: 'danger',
                   text: {
                     type: 'plain-text',
-                    content: '拆除',
+                    content: '拆除小镇',
                   },
                   click: 'return-val',
                   value: '[st]GameDelete',

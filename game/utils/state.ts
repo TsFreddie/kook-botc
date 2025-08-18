@@ -47,7 +47,7 @@ export class CValue<T> implements ReactiveState<T> {
   /** Set a new value and notify listeners */
   set(value: T): void {
     // Only notify if value actually changed
-    if (this._value !== value || (typeof value === 'object' && value !== null)) {
+    if (this._value !== value) {
       this._value = value;
       this.notifyListeners();
     }
@@ -63,6 +63,11 @@ export class CValue<T> implements ReactiveState<T> {
         this.listeners.delete(listener);
       },
     };
+  }
+
+  /** Trigger an update, this is useful when you want to trigger updates after editing an object */
+  update() {
+    this.notifyListeners();
   }
 
   protected notifyListeners(): void {
@@ -277,36 +282,25 @@ function makeCRecord<K extends keyof any, T>(initialValue: Record<K, T>): CRecor
 }
 
 // Overloads for type inference
-export function $state<T>(initialValue: T[]): CArray<T>;
-export function $state<K extends keyof any, T>(initialValue: object & Record<K, T>): CRecord<K, T>;
 export function $state<T>(initialValue: T): CValue<T>;
 
 /**
- * Create a reactive state with automatic type detection
- *
- * @param initialValue - Initial value for the state
- * @returns The appropriate reactive state type based on the input
+ * Create a reactive state
  */
-export function $state<T>(initialValue: T) {
-  // Handle primitives
-  if (
-    typeof initialValue === 'string' ||
-    typeof initialValue === 'number' ||
-    typeof initialValue === 'boolean'
-  ) {
-    return new CValue(initialValue);
-  }
-
-  // Handle arrays
-  if (Array.isArray(initialValue)) {
-    return makeCArray(initialValue);
-  }
-
-  // Handle objects/records
-  if (typeof initialValue === 'object' && initialValue !== null) {
-    return makeCRecord(initialValue);
-  }
-
-  // Fallback for null/undefined - treat as CValue
+export function $state<T>(initialValue: T): CValue<T> {
   return new CValue(initialValue);
+}
+
+/**
+ * Create a reactive array
+ */
+export function $array<T>(initialValue: T[]): CArray<T> {
+  return makeCArray(initialValue);
+}
+
+/**
+ * Create a reactive record
+ */
+export function $record<K extends keyof any, T>(initialValue: Record<K, T>): CRecord<K, T> {
+  return makeCRecord(initialValue);
 }

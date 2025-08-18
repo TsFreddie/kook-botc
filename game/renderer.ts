@@ -13,6 +13,7 @@ import type { GameState } from './session';
 import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
 import { LatestQueue, SequentialQueue } from './utils/queue';
+import StorytellerPlayerList from './cards/StorytellerPlayerList';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -97,6 +98,13 @@ export class Renderer {
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
         }),
+        StorytellerPlayerList({
+          listMode: this.state.listMode,
+          list: this.state.list,
+          voteInfo: this.state.voteInfo,
+          votingStart: this.state.votingStart,
+          votingEnd: this.state.votingEnd,
+        }),
       ],
 
       townsquare: [
@@ -134,12 +142,12 @@ export class Renderer {
       const results = await Promise.allSettled([
         (async () => {
           this._storytellerChannelId = (
-            await this.createTextChannel('🏢 城镇广场(说书人)', ChannelMode.Storyteller)
+            await this.createTextChannel('⛲ 城镇广场(说书人)', ChannelMode.Storyteller)
           ).id;
           this.register.addChannel(this._storytellerChannelId);
 
           this._townsquareChannelId = (
-            await this.createTextChannel('🏢 城镇广场', ChannelMode.Player)
+            await this.createTextChannel('⛲ 城镇广场', ChannelMode.Player)
           ).id;
           this.register.addChannel(this._townsquareChannelId);
         })(),

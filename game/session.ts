@@ -1,7 +1,7 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
-import { $state, CValue, type ReactiveState } from './utils/state';
-import { ROAMING_LOCATIONS } from './consts';
+import { $state, CValue, type CArray, type ReactiveState } from './utils/state';
+import { CIRCLED_NUMBERS, ROAMING_LOCATIONS } from './consts';
 import { ApiMessageType } from '../lib/api';
 import { textCard } from '../templates/text';
 
@@ -35,15 +35,51 @@ export enum PlayerStatus {
 }
 
 export enum ListMode {
-  /** 玩家状态 */
+  /** 状态 */
   STATUS = 0,
-  /**  */
+  /** 换座 */
+  SWAP,
+  /** 旁观 */
+  SPECTATE,
+  /** 禁言 */
+  MUTE,
+  /** 上麦 */
+  SPOTLIGHT,
+  /** 托梦 */
+  PRIVATE,
+  /** 提名 */
+  NOMINATE,
+  /** 投票 */
+  VOTE,
+}
+
+export interface ListPlayerItem {
+  type: 'player' | 'spectator' | 'storyteller';
+  id: string;
+  info: string;
+  selected: boolean;
 }
 
 /** 游戏状态 */
 export interface GameState {
+  /** 当前阶段 */
   phase: CValue<Phase>;
-  voting: boolean;
+
+  /** （说书人）列表模式 */
+  listMode: CValue<ListMode>;
+
+  /** （城镇广场）是否为投票模式 */
+  voting: CValue<boolean>;
+
+  /** 玩家列表 */
+  list: CValue<ListPlayerItem[]>;
+
+  /** 投票信息 */
+  voteInfo: CValue<string>;
+
+  /** 投票倒计时 */
+  votingStart: CValue<number>;
+  votingEnd: CValue<number>;
 }
 
 /** 玩家状态 */
@@ -52,19 +88,39 @@ interface PlayerState {
   status: PlayerStatus;
 }
 
+const SEP = ' (font)|(font)[tips] ';
+const statusToColumns = (status: PlayerStatus) => {
+  switch (status) {
+    case PlayerStatus.ALIVE:
+      return `　${SEP}　`;
+    case PlayerStatus.DEAD:
+      return `(font)亡(font)[danger]${SEP}(font)票(font)[success]`;
+    case PlayerStatus.DEAD_VOTED:
+      return `(font)亡(font)[danger]${SEP}　`;
+  }
+};
+
 /**
  * 游戏会话
  */
 export class Session {
   private readonly state: GameState = {
     phase: $state<Phase>(Phase.INITIALIZING),
-    voting: false,
+    listMode: $state(ListMode.STATUS),
+    voting: $state(false),
+    list: $state([]),
+    voteInfo: $state(''),
+    votingStart: $state(0),
+    votingEnd: $state(0),
   };
 
   private players: PlayerState[] = [];
   private register: Register;
   private destroyed = false;
   private greeted = new Set<string>();
+
+  /** 列表的选择 */
+  private listSelection = new Set<string>();
 
   public readonly storytellerId: string;
   public readonly renderer: Renderer;
@@ -76,12 +132,18 @@ export class Session {
 
     // 初始化完成后进入等待说书人状态
     this.state.phase.set(Phase.WAITING_FOR_STORYTELLER);
+    this.updatePlayerList();
   }
 
   /**
    * 目前在语音频道活跃的玩家
    */
   private activeUsers: Set<string> = new Set();
+
+  /**
+   * 目前在城镇广场语音频道的玩家
+   */
+  private townsquareUsers: Set<string> = new Set();
 
   /**
    * 当前是否为指定状态
@@ -107,6 +169,7 @@ export class Session {
     }
 
     this.players.splice(index, 1);
+    this.updatePlayerList();
   }
 
   /**
@@ -124,6 +187,7 @@ export class Session {
       id: user,
       status: PlayerStatus.ALIVE,
     });
+    this.updatePlayerList();
   }
 
   /**
@@ -153,6 +217,31 @@ export class Session {
     // 说书人也应该回到广场
     players.push(this.storytellerId);
     dynamicChannels.moveUsersToMainChannel(players);
+  }
+
+  /**
+   * 更新玩家列表数据
+   */
+  private updatePlayerList() {
+    // 玩家顺序：按槽位游戏玩家 -> 说书人 -> 旁观玩家
+    const players: typeof this.state.list.value = [...this.players].map((p, index) => {
+      return {
+        type: 'player',
+        id: p.id,
+        info: `(font)${CIRCLED_NUMBERS[index] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'body' : 'tips'}]${SEP}${statusToColumns(p.status)}${SEP}(met)${p.id}(met)`,
+        selected: this.listSelection.has(p.id),
+      };
+    });
+
+    players.push({
+      type: 'storyteller',
+      id: this.storytellerId,
+      info: `(font)说书人(font)[${this.townsquareUsers.has(this.storytellerId) ? 'warning' : 'tips'}]${SEP}(met)${this.storytellerId}(met)`,
+      selected: this.listSelection.has(this.storytellerId),
+    });
+
+    // TODO: 显示旁观玩家
+    this.state.list.set(players);
   }
 
   storytellerGameStart() {
@@ -208,6 +297,7 @@ export class Session {
         this.players.splice(i, 1);
       }
     }
+    this.updatePlayerList();
 
     // 将剩余玩家移动到广场
     const dynamicChannels = this.renderer.dynamicChannels;
@@ -244,33 +334,23 @@ export class Session {
     this.register.destroy();
   }
 
-  // List actions (placeholder implementations)
-  storytellerListKick() {
-    console.log('storytellerListKick called');
-  }
+  storytellerSelectStatus(userId: string) {
+    const player = this.players.find((p) => p.id === userId);
+    if (!player) return;
 
-  storytellerListGoto() {
-    console.log('storytellerListGoto called');
-  }
+    switch (player.status) {
+      case PlayerStatus.ALIVE:
+        player.status = PlayerStatus.DEAD;
+        break;
+      case PlayerStatus.DEAD:
+        player.status = PlayerStatus.DEAD_VOTED;
+        break;
+      case PlayerStatus.DEAD_VOTED:
+        player.status = PlayerStatus.ALIVE;
+        break;
+    }
 
-  storytellerListVote() {
-    console.log('storytellerListVote called');
-  }
-
-  storytellerListStatus() {
-    console.log('storytellerListStatus called');
-  }
-
-  storytellerListPrivate() {
-    console.log('storytellerListPrivate called');
-  }
-
-  storytellerListSwap() {
-    console.log('storytellerListSwap called');
-  }
-
-  storytellerListMute() {
-    console.log('storytellerListMute called');
+    this.updatePlayerList();
   }
 
   // Player actions
@@ -316,6 +396,11 @@ export class Session {
     if (this.destroyed) return;
 
     this.activeUsers.add(userId);
+
+    if (channelId === this.renderer.voiceChannelId) {
+      this.townsquareUsers.add(userId);
+      this.updatePlayerList();
+    }
 
     // 说书人加入语音频道时，进入准备阶段
     if (userId === this.storytellerId && this.phase(Phase.WAITING_FOR_STORYTELLER)) {
@@ -368,6 +453,8 @@ export class Session {
     if (this.destroyed) return;
 
     this.activeUsers.delete(userId);
+    this.townsquareUsers.delete(userId);
+    this.updatePlayerList();
 
     // 说书人不会退出游戏
     if (userId === this.storytellerId) return;
