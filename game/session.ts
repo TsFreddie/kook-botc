@@ -141,13 +141,15 @@ export class Session {
 
   /**
    * 目前在语音频道活跃的玩家
+   *
+   * 玩家 -> 频道
    */
-  private activeUsers: Set<string> = new Set();
+  private activeUsers = new Map<string, string>();
 
   /**
    * 目前在城镇广场语音频道的玩家
    */
-  private townsquareUsers: Set<string> = new Set();
+  private townsquareUsers = new Set<string>();
 
   /**
    * 当前是否为指定状态
@@ -212,15 +214,29 @@ export class Session {
     dynamicChannels.moveUsersToCottage(players);
   }
 
-  private internalPlayerToTownsquare() {
+  private internalPlayerToTownsquare(forceAll: boolean = false) {
     // 移动所有玩家到广场
     const dynamicChannels = this.renderer.dynamicChannels;
     if (!dynamicChannels) return;
 
-    const players = this.players.map((p) => p.id);
+    const players = new Set(this.players.map((p) => p.id));
+
     // 说书人也应该回到广场
-    players.push(this.storytellerId);
-    dynamicChannels.moveUsersToMainChannel(players);
+    players.add(this.storytellerId);
+
+    // 也将所有在语音频道的玩家都拉回广场
+    for (const userId of this.activeUsers.keys()) {
+      players.add(userId);
+    }
+
+    // 如果不是强制拉回，则仅拉会已知不在广场的玩家
+    if (!forceAll) {
+      for (const userId of this.townsquareUsers) {
+        players.delete(userId);
+      }
+    }
+
+    dynamicChannels.moveUsersToMainChannel([...players.values()]);
   }
 
   /**
@@ -244,10 +260,27 @@ export class Session {
       selected: this.listSelection.has(this.storytellerId),
     });
 
+    // 添加旁观玩家（在语音频道但不在游戏中的用户）
+    const playerIds = new Set(this.players.map((p) => p.id));
+    const spectators: string[] = [];
+    for (const userId of this.register.getJoinedPlayers()) {
+      if (userId !== this.storytellerId && !playerIds.has(userId)) {
+        spectators.push(userId);
+      }
+    }
+
+    // 按用户ID排序旁观者
+    spectators.sort().forEach((userId) => {
+      players.push({
+        type: 'spectator',
+        id: userId,
+        info: `(font)旁观者(font)[tips]${SEP}(met)${userId}(met)`,
+        selected: this.listSelection.has(userId),
+      });
+    });
+
     // 更新城镇广场人数
     this.state.townsquareCount.set(this.townsquareUsers.size);
-
-    // TODO: 显示旁观玩家
     this.state.list.set(players);
   }
 
@@ -300,18 +333,14 @@ export class Session {
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
       const player = this.players[i]!;
-      if (!this.register.isPlayerJoined(player.id)) {
+      if (!this.register.isUserJoined(player.id)) {
         this.players.splice(i, 1);
       }
     }
     this.updatePlayerList();
 
-    // 将剩余玩家移动到广场
-    const dynamicChannels = this.renderer.dynamicChannels;
-    if (!dynamicChannels) return;
-
-    const players = this.players.map((p) => p.id);
-    dynamicChannels.moveUsersToMainChannel(players);
+    // 强制将所有玩家拉回广场语音
+    this.internalPlayerToTownsquare(true);
 
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.hideCottages();
@@ -323,7 +352,7 @@ export class Session {
     if (this.phase(Phase.NIGHT)) {
       this.internalPlayerToCottage();
     } else {
-      this.internalPlayerToTownsquare();
+      this.internalPlayerToTownsquare(true);
     }
   }
 
@@ -339,6 +368,24 @@ export class Session {
     if (this.destroyed) return;
 
     this.register.destroy();
+  }
+
+  storytellerListSwap() {
+    this.listSelection.clear();
+    this.state.listMode.set(ListMode.SWAP);
+    this.updatePlayerList();
+  }
+
+  storytellerListSpectate() {
+    this.listSelection.clear();
+    this.state.listMode.set(ListMode.SPECTATE);
+    this.updatePlayerList();
+  }
+
+  storytellerListStatus() {
+    this.listSelection.clear();
+    this.state.listMode.set(ListMode.STATUS);
+    this.updatePlayerList();
   }
 
   storytellerSelectStatus(userId: string) {
@@ -360,25 +407,57 @@ export class Session {
     this.updatePlayerList();
   }
 
-  // Player actions
-  playerGameLeave(userId: string) {
-    if (this.destroyed) return;
+  storytellerSelectSwap(userId: string) {
+    // Only allow selecting players for swapping
+    if (!this.internalHasPlayer(userId)) return;
 
-    // 准备阶段退出语音的玩家会自动退出玩家列表并退出游戏
-    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
-      this.internalRemovePlayer(userId);
+    if (this.listSelection.has(userId)) {
+      // Deselect if already selected
+      this.listSelection.delete(userId);
+    } else {
+      // Select the player
+      this.listSelection.add(userId);
     }
+
+    // If we have exactly 2 players selected, perform the swap
+    if (this.listSelection.size === 2) {
+      const selectedPlayers = Array.from(this.listSelection);
+      const player1Index = this.players.findIndex((p) => p.id === selectedPlayers[0]);
+      const player2Index = this.players.findIndex((p) => p.id === selectedPlayers[1]);
+
+      if (player1Index !== -1 && player2Index !== -1) {
+        // Swap the players in the array
+        [this.players[player1Index], this.players[player2Index]] = [
+          this.players[player2Index]!,
+          this.players[player1Index]!,
+        ];
+      }
+
+      // Clear selection and return to status mode
+      this.listSelection.clear();
+    }
+
+    this.updatePlayerList();
+  }
+
+  storytellerSelectSpectate(userId: string) {
+    // Don't allow spectating the storyteller
+    if (userId === this.storytellerId) return;
+
+    if (this.internalHasPlayer(userId)) {
+      // Remove player from game (make them a spectator)
+      this.internalRemovePlayer(userId);
+    } else if (this.townsquareUsers.has(userId)) {
+      // Add spectator back to game (they must be in voice channel)
+      this.internalAddPlayer(userId);
+    }
+
+    this.updatePlayerList();
   }
 
   // Location actions
   locationSet(userId: string, locationId: number) {
     if (this.destroyed) return;
-
-    if (userId !== this.storytellerId && !this.internalHasPlayer(userId)) {
-      // 只有说书人和玩家可以自由移动
-      // 旁观玩家只能留在城镇广场
-      return;
-    }
 
     const dynamicChannels = this.renderer.dynamicChannels;
     if (!dynamicChannels) return;
@@ -402,7 +481,7 @@ export class Session {
   systemPlayerJoinVoiceChannel(userId: string, channelId: string) {
     if (this.destroyed) return;
 
-    this.activeUsers.add(userId);
+    this.activeUsers.set(userId, channelId);
 
     if (channelId === this.renderer.voiceChannelId) {
       this.townsquareUsers.add(userId);
@@ -470,6 +549,34 @@ export class Session {
     if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
       this.internalRemovePlayer(userId);
     }
+  }
+
+  kickoutUser(userId: string) {
+    if (this.destroyed) return;
+
+    const channelId = this.activeUsers.get(userId);
+    if (!channelId) return;
+
+    this.renderer.dynamicChannels?.kickUserFromChannel(userId, channelId);
+  }
+
+  notifyUserJoin(userId: string) {
+    if (this.destroyed) return;
+    this.updatePlayerList();
+  }
+
+  notifyUserLeave(userId: string) {
+    if (this.destroyed) return;
+
+    // 如果在准备阶段，退出的玩家会自动退出游戏
+    if (this.allowAutoLeave() && this.internalHasPlayer(userId)) {
+      this.internalRemovePlayer(userId);
+    }
+
+    // 如果存在的话，删除玩家的小屋
+    this.renderer.dynamicChannels?.destroyCottageForUser(userId);
+
+    this.updatePlayerList();
   }
 
   /**

@@ -5,7 +5,8 @@ import { Session } from './session';
 export interface Register {
   addChannel: (channel: string) => void;
   removeChannel: (channel: string) => void;
-  isPlayerJoined: (user: string) => boolean;
+  isUserJoined: (user: string) => boolean;
+  getJoinedPlayers: () => string[];
   destroy: () => void;
 }
 
@@ -67,7 +68,7 @@ export class Router {
         this.channelMap.delete(channel);
         data.channels.delete(channel);
       },
-      isPlayerJoined: (user) => {
+      isUserJoined: (user) => {
         if (!this.sessions.has(session)) {
           return false;
         }
@@ -75,6 +76,9 @@ export class Router {
       },
       destroy: () => {
         this.removeSession(session);
+      },
+      getJoinedPlayers: () => {
+        return [...data.users.values()];
       },
     });
 
@@ -107,6 +111,7 @@ export class Router {
 
     // 通知渲染器更新用户角色
     session.renderer.grantUserRole(userId);
+    session.notifyUserJoin(userId);
   }
 
   /**
@@ -123,6 +128,7 @@ export class Router {
 
     // 通知渲染器更新用户角色
     session.renderer.revokeUserRole(userId);
+    session.notifyUserLeave(userId);
   }
 
   /**
@@ -207,6 +213,17 @@ export class Router {
     if (session.allowAutoLeave()) {
       this.removeUserFromSession(session, user);
     }
+  }
+
+  /**
+   * 用户点击离开游戏，会尝试将用户从当前语音频道中移除
+   */
+  actionGameLeave(user: string, channel: string) {
+    const session = this.getSessionByUserId(user);
+    if (!session) return;
+
+    session.kickoutUser(user);
+    this.removeUserFromSession(session, user);
   }
 
   /**

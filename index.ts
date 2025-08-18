@@ -122,6 +122,18 @@ const createRoom = async (user: string, message: string) => {
 BOT.onMessageBtnClick(async (event) => {
   const value = event.extra.body.value;
 
+  if (value.startsWith('[rt]')) {
+    // Router 事件
+    const handlerName = 'action' + value.slice(4); // Convert [rt]GameLeave to actionGameLeave
+    const userId = event.extra.body.user_id;
+    const channelId = event.extra.body.target_id;
+    const handler = (ROUTER as any)[handlerName];
+    if (handler && typeof handler === 'function') {
+      await handler.call(ROUTER, userId, channelId);
+    }
+    return;
+  }
+
   if (value.startsWith('[st]')) {
     // 说书人操作
     const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
@@ -136,38 +148,47 @@ BOT.onMessageBtnClick(async (event) => {
   }
 
   if (value.startsWith('[pl]')) {
-    // 玩家操作
-    const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
-    if (!session) return;
+    // 玩家操作，必须玩家在会话中才能操作
+    const userSession = ROUTER.getSessionByChannelId(event.extra.body.user_id);
+    if (!userSession) return;
+
+    // 只有在玩家所在的频道才能响应
+    const channelSession = ROUTER.getSessionByChannelId(event.extra.body.target_id);
+    if (userSession !== channelSession) return;
 
     // 说书人不能使用玩家操作
-    if (event.extra.body.user_id === session.storytellerId) {
+    if (event.extra.body.user_id === userSession.storytellerId) {
       return;
     }
 
     const handlerName = 'player' + value.slice(4); // Convert [pl]GameLeave to playerGameLeave
     const userId = event.extra.body.user_id;
-    const handler = (session as any)[handlerName];
+    const handler = (userSession as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(session, userId);
+      await handler.call(userSession, userId);
     }
     return;
   }
 
   if (value.startsWith('[lc]')) {
     // 位置移动
-    const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
-    if (!session) return;
+    const userSession = ROUTER.getSessionByUserId(event.extra.body.user_id);
+    if (!userSession) return;
+    const channelSession = ROUTER.getSessionByChannelId(event.extra.body.target_id);
+
+    // 只有在玩家所在的频道才能移动
+    if (userSession !== channelSession) return;
 
     const location = Number(value.slice(4));
     if (isNaN(location)) return;
 
-    session.locationSet(event.extra.body.user_id, location);
+    userSession.locationSet(event.extra.body.user_id, location);
     return;
   }
 
   if (value.startsWith('[sp]')) {
     // 说书人玩家列表操作
+    // 只要能访问就能按
     const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
     if (!session) return;
 

@@ -43,7 +43,7 @@ class CardRenderer extends Card<Props> {
                     content: '离开小镇',
                   },
                   click: 'return-val',
-                  value: '[pl]GameLeave',
+                  value: '[rt]GameLeave',
                 },
               ],
             },

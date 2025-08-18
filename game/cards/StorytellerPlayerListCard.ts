@@ -1,7 +1,7 @@
 import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { ListMode, type ListPlayerItem } from '../session';
-import type { CArray, CValue } from '../utils/state';
+import type { CValue } from '../utils/state';
 import type { ActionGroup } from '../../templates/types';
 import type { PlayersTemplateParams } from '../../templates/players';
 import type { ButtonTheme } from '../../lib/api';
@@ -61,7 +61,9 @@ class CardRenderer extends Card<Props> {
         status = '**换座模式**\n选择两名玩家交换座位';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'primary';
-        action = { text: '选择', theme: 'info' };
+        action = state.list.value.some((item) => item.selected)
+          ? { text: '交换', theme: 'success' }
+          : { text: '选择', theme: 'primary' };
         value = 'Swap';
         break;
 
@@ -87,7 +89,7 @@ class CardRenderer extends Card<Props> {
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([{ text: '禁言调整', theme: 'success', value: '[st]ListMute' }]);
         theme = 'warning';
-        action = { text: '上麦', theme: 'info' };
+        action = { text: '上麦', theme: 'warning' };
         value = 'Spotlight';
         break;
 
@@ -141,7 +143,10 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.SWAP:
-          if (item.selected) {
+          if (item.type !== 'player') {
+            // 不是玩家不能换座
+            action = 'none';
+          } else if (item.selected) {
             action = { text: '已选择', theme: 'secondary' };
           }
           break;

@@ -14,6 +14,9 @@ export class DynamicChannels {
   private destroyed = false;
   private taskFinishTime = 0;
 
+  private showingLocations = false;
+  private showingCottages = false;
+
   constructor(
     private mainChannel: string,
     private storytellerId: string,
@@ -48,6 +51,20 @@ export class DynamicChannels {
     );
   }
 
+  kickUserFromChannel(userId: string, channelId: string) {
+    if (this.destroyed) return;
+
+    this.queue.push(async () => {
+      // 不是那么重要的行为，就不用因为这个报错强关了
+      try {
+        await BOT.api.channelKickout(channelId, userId);
+      } catch (err) {
+        console.error(err);
+      }
+      this.taskFinishTime = Date.now();
+    });
+  }
+
   /**
    * 将用户移动到指定的频道名中，如果频道不存在则创建
    *
@@ -58,16 +75,16 @@ export class DynamicChannels {
     if (this.isThrottled(userId)) return;
     this.throttle(userId);
 
-    const channel = this.channels.get(name);
-    if (channel) {
-      this.queue.push(async () => {
+    this.queue.push(async () => {
+      const channel = this.channels.get(name);
+
+      // 如果频道已经存在则直接加入即可
+      if (channel) {
         await BOT.api.channelMoveUser(channel, [userId]);
         this.taskFinishTime = Date.now();
-      });
-      return;
-    }
+        return;
+      }
 
-    this.queue.push(async () => {
       const newChannel = await BOT.api.channelCreate({
         guild_id: GAME.guildId,
         name: name,
@@ -76,25 +93,26 @@ export class DynamicChannels {
         limit_amount: 20,
         parent_id: GAME.gameCategoryId,
       });
+
       this.register.addChannel(newChannel.id);
       this.channels.set(name, newChannel.id);
 
-      // 配置频道权限(默认禁止所有人查看)
-      const permissionUpdates = [
-        BOT.api.channelRoleUpdate({
+      // 配置频道权限
+      try {
+        // 如果目前正在显示地点，则创建时就允许角色查看
+        // 即使不能查看仍然有连接权限
+        await BOT.api.channelRoleUpdate({
           channel_id: newChannel.id,
           type: 'role_id',
-          value: '0',
-          deny: Permission.VIEW_CHANNELS,
-        }),
-      ];
-
-      const result = await Promise.allSettled(permissionUpdates);
-      result.forEach((result) => {
-        if (result.status === 'rejected') {
-          console.error(result.reason);
-        }
-      });
+          value: this.roleId,
+          allow:
+            (this.showingLocations ? Permission.VIEW_CHANNELS : 0) |
+            Permission.CONNECT_VOICE |
+            Permission.PASSIVE_CONNECT_VOICE,
+        });
+      } catch (err) {
+        console.error(err);
+      }
 
       await BOT.api.channelMoveUser(newChannel.id, [userId]);
       this.taskFinishTime = Date.now();
@@ -156,7 +174,8 @@ export class DynamicChannels {
     if (this.destroyed) return;
 
     this.queue.push(async () => {
-      await BOT.api.channelMoveUser(this.mainChannel, users);
+      if (users.length > 0) await BOT.api.channelMoveUser(this.mainChannel, users);
+
       this.taskFinishTime = Date.now();
     });
   }
@@ -174,17 +193,15 @@ export class DynamicChannels {
 
   private moveUserToCottage(userId: string) {
     if (this.destroyed) return;
-
-    const cottage = this.cottages.get(userId);
-    if (cottage) {
-      this.queue.push(async () => {
+    this.queue.push(async () => {
+      // 如果小屋已经存在，则直接加入即可
+      const cottage = this.cottages.get(userId);
+      if (cottage) {
         await BOT.api.channelMoveUser(cottage, [userId]);
         this.taskFinishTime = Date.now();
-      });
-      return;
-    }
+        return;
+      }
 
-    this.queue.push(async () => {
       // 获取用户信息
       const user = await BOT.api.userView({ user_id: userId, guild_id: GAME.guildId });
       // 创建频道
@@ -200,12 +217,21 @@ export class DynamicChannels {
 
       // 配置频道权限(仅用户自己与说书人可见)
       const permissionUpdates = [
-        BOT.api.channelRoleUpdate({
-          channel_id: newChannel.id,
-          type: 'user_id',
-          value: userId,
-          allow: Permission.VIEW_CHANNELS,
-        }),
+        BOT.api.channelRoleUpdate(
+          this.showingCottages
+            ? {
+                channel_id: newChannel.id,
+                type: 'user_id',
+                value: userId,
+                allow: Permission.VIEW_CHANNELS,
+              }
+            : {
+                channel_id: newChannel.id,
+                type: 'user_id',
+                value: userId,
+                deny: Permission.VIEW_CHANNELS,
+              },
+        ),
         BOT.api.channelRoleUpdate({
           channel_id: newChannel.id,
           type: 'user_id',
@@ -232,6 +258,8 @@ export class DynamicChannels {
    */
   showLocations() {
     if (this.destroyed) return;
+
+    this.showingLocations = true;
 
     this.queue.push(async () => {
       const permissionUpdates: Promise<any>[] = [];
@@ -265,6 +293,8 @@ export class DynamicChannels {
   hideLocations() {
     if (this.destroyed) return;
 
+    this.showingLocations = false;
+
     this.queue.push(async () => {
       const permissionUpdates: Promise<any>[] = [];
 
@@ -296,6 +326,8 @@ export class DynamicChannels {
    */
   showCottages() {
     if (this.destroyed) return;
+
+    this.showingCottages = true;
 
     this.queue.push(async () => {
       const permissionUpdates: Promise<any>[] = [];
@@ -329,6 +361,8 @@ export class DynamicChannels {
   hideCottages() {
     if (this.destroyed) return;
 
+    this.showingCottages = false;
+
     this.queue.push(async () => {
       const permissionUpdates: Promise<any>[] = [];
 
@@ -351,6 +385,24 @@ export class DynamicChannels {
         }
       });
 
+      this.taskFinishTime = Date.now();
+    });
+  }
+
+  /** 如果用户离开了小镇，可以删除他的小屋 */
+  destroyCottageForUser(userId: string) {
+    const cottage = this.cottages.get(userId);
+    if (!cottage) return;
+
+    this.cottages.delete(userId);
+    this.register.removeChannel(cottage);
+
+    this.queue.push(async () => {
+      try {
+        await BOT.api.channelDelete(cottage);
+      } catch (err) {
+        console.error(err);
+      }
       this.taskFinishTime = Date.now();
     });
   }

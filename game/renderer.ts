@@ -13,7 +13,7 @@ import type { GameState } from './session';
 import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
 import { LatestQueue, SequentialQueue } from './utils/queue';
-import StorytellerPlayerList from './cards/StorytellerPlayerList';
+import StorytellerPlayerListCard from './cards/StorytellerPlayerListCard';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -98,7 +98,7 @@ export class Renderer {
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
         }),
-        StorytellerPlayerList({
+        StorytellerPlayerListCard({
           listMode: this.state.listMode,
           list: this.state.list,
           voteInfo: this.state.voteInfo,

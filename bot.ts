@@ -167,7 +167,9 @@ const initialize = async () => {
     Permission.VIEW_CHANNELS |
     Permission.SEND_MESSAGES |
     Permission.ADD_REACTIONS |
-    Permission.CREATE_INVITE;
+    Permission.CREATE_INVITE |
+    Permission.CONNECT_VOICE |
+    Permission.PASSIVE_CONNECT_VOICE;
   if (
     !gameCategory.permission_overwrites ||
     !gameCategory.permission_overwrites.some(
