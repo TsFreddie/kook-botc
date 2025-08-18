@@ -295,6 +295,20 @@ export class Renderer {
     });
   }
 
+  /**
+   * 向主语音频道发送消息
+   */
+  sendMessageToVoiceChannel(type: ApiMessageType, content: string, template_id?: string) {
+    this.messagingQueue.push(async () => {
+      await BOT.api.messageCreate({
+        target_id: this._voiceChannelId,
+        type: type,
+        content: content,
+        template_id: template_id,
+      });
+    });
+  }
+
   /** 销毁渲染器，这会删除所有相关的角色与频道 */
   async destroy() {
     const state = this.rendererState;

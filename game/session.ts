@@ -2,6 +2,8 @@ import type { Register } from './router';
 import { Renderer } from './renderer';
 import { $state, CValue, type ReactiveState } from './utils/state';
 import { ROAMING_LOCATIONS } from './consts';
+import { ApiMessageType } from '../lib/api';
+import { textCard } from '../templates/text';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -62,6 +64,7 @@ export class Session {
   private players: PlayerState[] = [];
   private register: Register;
   private destroyed = false;
+  private greeted = new Set<string>();
 
   public readonly storytellerId: string;
   public readonly renderer: Renderer;
@@ -299,7 +302,11 @@ export class Session {
     if (location.isMain) {
       dynamicChannels.roamUserToMainChannel(userId);
     } else if (location.isCottage) {
-      dynamicChannels.roamUserToCottage(userId);
+      if (userId == this.storytellerId) {
+        // TODO: 将玩家列表切换为小屋模式
+      } else {
+        dynamicChannels.roamUserToCottage(userId);
+      }
     } else {
       dynamicChannels.roamUserTo(location.name, userId);
     }
@@ -314,6 +321,18 @@ export class Session {
     if (userId === this.storytellerId && this.phase(Phase.WAITING_FOR_STORYTELLER)) {
       this.state.phase.set(Phase.PREPARING);
 
+      if (!this.greeted.has(userId)) {
+        this.greeted.add(userId);
+        this.renderer.sendMessageToVoiceChannel(
+          ApiMessageType.CARD,
+          JSON.stringify(
+            textCard(
+              `说书人 (met)${userId}(met) 已加入小镇\n请说书人前往：(chn)${this.renderer.storytellerChannelId}(chn)`,
+            ),
+          ),
+        );
+      }
+
       // 说书人不会加入游戏
       return;
     }
@@ -321,6 +340,18 @@ export class Session {
     // 准备阶段加入语音的玩家会自动成为玩家
     if (this.allowAutoLeave() && !this.internalHasPlayer(userId)) {
       this.internalAddPlayer(userId);
+
+      if (!this.greeted.has(userId)) {
+        this.greeted.add(userId);
+        this.renderer.sendMessageToVoiceChannel(
+          ApiMessageType.CARD,
+          JSON.stringify(
+            textCard(
+              `镇民 (met)${userId}(met) 已加入小镇\n请镇民前往：(chn)${this.renderer.townsquareChannelId}(chn)`,
+            ),
+          ),
+        );
+      }
     }
 
     // 如果加入频道的是玩家，且现在是夜晚，但是玩家加入的主频道，将玩家移动到小屋
