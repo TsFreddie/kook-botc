@@ -19,6 +19,9 @@ interface Props {
   /** 投票倒计时 */
   votingStart: CValue<number>;
   votingEnd: CValue<number>;
+
+  /** 广场人数 */
+  townsquareCount: CValue<number>;
 }
 
 /**
@@ -189,7 +192,7 @@ class CardRenderer extends Card<Props> {
 
     const data: PlayersTemplateParams = {
       theme,
-      status,
+      status: `城镇广场人数：${state.townsquareCount.value} / ${state.list.value.length}\n${status}`,
       action,
       prefix: `[sp]${value}`,
       groups: groups.length > 0 ? groups : undefined,

@@ -80,6 +80,9 @@ export interface GameState {
   /** 投票倒计时 */
   votingStart: CValue<number>;
   votingEnd: CValue<number>;
+
+  /** 城镇广场人数 */
+  townsquareCount: CValue<number>;
 }
 
 /** 玩家状态 */
@@ -112,6 +115,7 @@ export class Session {
     voteInfo: $state(''),
     votingStart: $state(0),
     votingEnd: $state(0),
+    townsquareCount: $state(0),
   };
 
   private players: PlayerState[] = [];
@@ -239,6 +243,9 @@ export class Session {
       info: `(font)说书人(font)[${this.townsquareUsers.has(this.storytellerId) ? 'warning' : 'tips'}]${SEP}(met)${this.storytellerId}(met)`,
       selected: this.listSelection.has(this.storytellerId),
     });
+
+    // 更新城镇广场人数
+    this.state.townsquareCount.set(this.townsquareUsers.size);
 
     // TODO: 显示旁观玩家
     this.state.list.set(players);
