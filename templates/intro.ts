@@ -9,8 +9,18 @@ export const introCard = [
         text: {
           type: 'kmarkdown',
           content:
-            '**《染・钟楼谜团》**是由 [The Pandemonium Institute](https://bloodontheclocktower.com/) 与 [集石](https://clocktower.gstonegames.com/) 共同发行的社交推理游戏。\n\n本频道与钟小楼机器人可以协助玩家进行线上组团游玩。\n\n游戏由一名对游戏了如指掌的「说书人」带领其他玩家进行游玩。\n「说书人」仍需要拥有正版游戏才可以配合本频道机器人开团。\n\n[点此了解与购买正版游戏](https://clocktower.gstonegames.com/)',
+            '**《染・钟楼谜团》**是由 [The Pandemonium Institute](https://bloodontheclocktower.com/) 与 [集石](https://clocktower.gstonegames.com/) 共同发行的社交推理游戏。\n\n钟小楼机器人可以协助玩家进行线上组团游玩。\n\n游戏由一名对游戏了如指掌的「说书人」带领其他玩家进行游玩。\n「说书人」仍需要拥有正版游戏才可以配合本频道机器人开团。\n\n[点此了解与购买正版游戏](https://clocktower.gstonegames.com/)',
         },
+      },
+      {
+        type: 'context',
+        elements: [
+          {
+            type: 'plain-text',
+            content:
+              '本服务器与钟小楼机器人与集石无任何联系，钟小楼机器人提供的游玩体验并非官方方式与渠道',
+          },
+        ],
       },
       {
         type: 'divider',

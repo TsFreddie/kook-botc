@@ -139,6 +139,9 @@ export class Session {
 
     // 初始化完成后进入等待说书人状态
     this.state.phase.set(Phase.WAITING_FOR_STORYTELLER);
+
+    // 给说书人 180 秒时间加入会话，不加入的话会自动销毁
+    this.setUserInactivityTimer(this.storytellerId);
     this.updatePlayerList();
   }
 
@@ -155,6 +158,17 @@ export class Session {
   private townsquareUsers = new Set<string>();
 
   /**
+   * 用户不活跃移除定时器
+   * 用户ID -> 定时器
+   */
+  private userInactivityTimers = new Map<string, NodeJS.Timeout>();
+
+  /**
+   * 会话空闲销毁定时器
+   */
+  private sessionIdleTimer?: NodeJS.Timeout;
+
+  /**
    * 当前是否为指定状态
    * @param phases 查询的状态
    * @returns true 如果为任意一个指定状态
@@ -164,6 +178,66 @@ export class Session {
       if (this.state.phase.value == phase) return true;
     }
     return false;
+  }
+
+  /**
+   * 清除用户的不活跃定时器
+   */
+  private clearUserInactivityTimer(userId: string) {
+    const timer = this.userInactivityTimers.get(userId);
+    if (timer) {
+      clearTimeout(timer);
+      this.userInactivityTimers.delete(userId);
+    }
+  }
+
+  /**
+   * 设置用户不活跃定时器（180秒后移除用户）
+   */
+  private setUserInactivityTimer(userId: string) {
+    // 清除现有定时器
+    this.clearUserInactivityTimer(userId);
+
+    const timer = setTimeout(() => {
+      if (this.destroyed) return;
+      if (userId === this.storytellerId) {
+        // 说书人不活跃则销毁整个会话
+        this.register.destroy();
+      } else {
+        // 普通用户不活跃则踢出游戏
+        this.register.kick(userId);
+      }
+      this.userInactivityTimers.delete(userId);
+    }, 180000); // 180 seconds
+
+    this.userInactivityTimers.set(userId, timer);
+  }
+
+  /**
+   * 清除会话空闲定时器
+   */
+  private clearSessionIdleTimer() {
+    if (this.sessionIdleTimer) {
+      clearTimeout(this.sessionIdleTimer);
+      this.sessionIdleTimer = undefined;
+    }
+  }
+
+  /**
+   * 设置会话空闲定时器（10秒后销毁会话）
+   */
+  private setSessionIdleTimer() {
+    // 清除现有定时器
+    this.clearSessionIdleTimer();
+
+    this.sessionIdleTimer = setTimeout(() => {
+      if (this.destroyed) return;
+
+      // 如果会话仍然没有活跃用户，销毁会话
+
+      this.register.destroy();
+      this.sessionIdleTimer = undefined;
+    }, 10000); // 10 seconds
   }
 
   /**
@@ -505,6 +579,12 @@ export class Session {
 
     this.activeUsers.set(userId, channelId);
 
+    // 清除用户的不活跃定时器
+    this.clearUserInactivityTimer(userId);
+
+    // 如果这是第一个活跃用户，清除会话空闲定时器
+    this.clearSessionIdleTimer();
+
     if (channelId === this.renderer.voiceChannelId) {
       this.townsquareUsers.add(userId);
       this.updatePlayerList();
@@ -566,7 +646,15 @@ export class Session {
     this.townsquareUsers.delete(userId);
     this.updatePlayerList();
 
-    // 说书人不会退出游戏
+    // 设置用户不活跃定时器（包括说书人）
+    this.setUserInactivityTimer(userId);
+
+    // 如果没有活跃用户了，设置会话空闲定时器
+    if (this.activeUsers.size === 0) {
+      this.setSessionIdleTimer();
+    }
+
+    // 说书人不会退出游戏（但会有不活跃检查）
     if (userId === this.storytellerId) return;
 
     // 准备阶段退出语音的玩家会自动退出玩家列表并退出游戏
@@ -614,6 +702,16 @@ export class Session {
     if (this.destroyed) return;
 
     this.destroyed = true;
+
+    // 清理所有用户不活跃定时器
+    for (const timer of this.userInactivityTimers.values()) {
+      clearTimeout(timer);
+    }
+    this.userInactivityTimers.clear();
+
+    // 清理会话空闲定时器
+    this.clearSessionIdleTimer();
+
     this.renderer.destroy();
   }
 }

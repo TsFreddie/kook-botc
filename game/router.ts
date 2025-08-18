@@ -219,6 +219,11 @@ export class Router {
     // 通知玩家退出语音频道
     session.systemPlayerLeaveVoiceChannel(user);
 
+    // 说书人不会退出会话
+    if (user === session.storytellerId) {
+      return;
+    }
+
     // 准备阶段退出的玩家将自动退出游戏
     if (session.allowAutoLeave()) {
       this.removeUserFromSession(session, user);
