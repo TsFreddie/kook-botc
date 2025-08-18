@@ -18,6 +18,7 @@ export class DynamicChannels {
     private mainChannel: string,
     private storytellerId: string,
     private register: Register,
+    private roleId: string,
   ) {}
 
   isThrottled(userId: string) {
@@ -78,13 +79,23 @@ export class DynamicChannels {
       this.register.addChannel(newChannel.id);
       this.channels.set(name, newChannel.id);
 
-      // 配置频道权限
-      await BOT.api.channelRoleUpdate({
-        channel_id: newChannel.id,
-        type: 'role_id',
-        value: '0',
-        deny: Permission.VIEW_CHANNELS,
+      // 配置频道权限(默认禁止所有人查看)
+      const permissionUpdates = [
+        BOT.api.channelRoleUpdate({
+          channel_id: newChannel.id,
+          type: 'role_id',
+          value: '0',
+          deny: Permission.VIEW_CHANNELS,
+        }),
+      ];
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
       });
+
       await BOT.api.channelMoveUser(newChannel.id, [userId]);
       this.taskFinishTime = Date.now();
     });
@@ -188,20 +199,158 @@ export class DynamicChannels {
       this.register.addChannel(newChannel.id);
 
       // 配置频道权限(仅用户自己与说书人可见)
-      await BOT.api.channelRoleUpdate({
-        channel_id: newChannel.id,
-        type: 'user_id',
-        value: userId,
-        allow: Permission.VIEW_CHANNELS,
+      const permissionUpdates = [
+        BOT.api.channelRoleUpdate({
+          channel_id: newChannel.id,
+          type: 'user_id',
+          value: userId,
+          allow: Permission.VIEW_CHANNELS,
+        }),
+        BOT.api.channelRoleUpdate({
+          channel_id: newChannel.id,
+          type: 'user_id',
+          value: this.storytellerId,
+          allow: Permission.VIEW_CHANNELS,
+        }),
+      ];
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
       });
-      await BOT.api.channelRoleUpdate({
-        channel_id: newChannel.id,
-        type: 'user_id',
-        value: this.storytellerId,
-        allow: Permission.VIEW_CHANNELS,
-      });
+
       await BOT.api.channelMoveUser(newChannel.id, [userId]);
       this.cottages.set(userId, newChannel.id);
+      this.taskFinishTime = Date.now();
+    });
+  }
+
+  /**
+   * 允许角色查看所有动态频道
+   */
+  showLocations() {
+    if (this.destroyed) return;
+
+    this.queue.push(async () => {
+      const permissionUpdates: Promise<any>[] = [];
+
+      // 为所有动态频道添加角色权限
+      this.channels.forEach((channelId) => {
+        permissionUpdates.push(
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'role_id',
+            value: this.roleId,
+            allow: Permission.VIEW_CHANNELS,
+          }),
+        );
+      });
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
+      });
+
+      this.taskFinishTime = Date.now();
+    });
+  }
+
+  /**
+   * 禁止角色查看所有动态频道
+   */
+  hideLocations() {
+    if (this.destroyed) return;
+
+    this.queue.push(async () => {
+      const permissionUpdates: Promise<any>[] = [];
+
+      // 为所有动态频道移除角色权限
+      this.channels.forEach((channelId) => {
+        permissionUpdates.push(
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'role_id',
+            value: this.roleId,
+            deny: Permission.VIEW_CHANNELS,
+          }),
+        );
+      });
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
+      });
+
+      this.taskFinishTime = Date.now();
+    });
+  }
+
+  /**
+   * 允许用户查看自己的小屋
+   */
+  showCottages() {
+    if (this.destroyed) return;
+
+    this.queue.push(async () => {
+      const permissionUpdates: Promise<any>[] = [];
+
+      // 为所有小屋添加用户权限
+      this.cottages.forEach((channelId, userId) => {
+        permissionUpdates.push(
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'user_id',
+            value: userId,
+            allow: Permission.VIEW_CHANNELS,
+          }),
+        );
+      });
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
+      });
+
+      this.taskFinishTime = Date.now();
+    });
+  }
+
+  /**
+   * 禁止用户查看自己的小屋
+   */
+  hideCottages() {
+    if (this.destroyed) return;
+
+    this.queue.push(async () => {
+      const permissionUpdates: Promise<any>[] = [];
+
+      // 为所有小屋移除用户权限
+      this.cottages.forEach((channelId, userId) => {
+        permissionUpdates.push(
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'user_id',
+            value: userId,
+            deny: Permission.VIEW_CHANNELS,
+          }),
+        );
+      });
+
+      const result = await Promise.allSettled(permissionUpdates);
+      result.forEach((result, index) => {
+        if (result.status === 'rejected') {
+          console.error(result.reason);
+        }
+      });
+
       this.taskFinishTime = Date.now();
     });
   }

@@ -41,8 +41,7 @@ class CardRenderer extends Card<Props> {
         break;
       case Phase.ROAMING:
         mode = `白天阶段 - 自由活动`;
-        status =
-          '现在是自由活动时间\n(font)可以前往各地进行私下交流(font)[info]\n> 那么？要去哪里吗？';
+        status = '现在是自由活动时间\n(font)你可以前往其他地点了(font)[info]\n> 那么？要去哪里吗？';
         groups.push(...LOCATION_BUTTONS);
         break;
     }

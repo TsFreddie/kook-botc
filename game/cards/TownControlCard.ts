@@ -49,7 +49,7 @@ class CardRenderer extends Card<Props> {
                 },
                 {
                   type: 'button',
-                  theme: 'warning',
+                  theme: 'success',
                   text: {
                     type: 'plain-text',
                     content: '重新开始',
@@ -90,6 +90,9 @@ class CardRenderer extends Card<Props> {
                 click: 'return-val',
                 value: '[st]ForceVoiceChannel',
               },
+            },
+            {
+              type: 'divider',
             },
             {
               type: 'context',

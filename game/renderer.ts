@@ -1,5 +1,5 @@
 import { BOT, GAME } from '../bot';
-import { ApiChannelType, Permission, VoiceQuality } from '../lib/api';
+import { ApiChannelType, ApiMessageType, Permission, VoiceQuality } from '../lib/api';
 import { $state } from './utils/state';
 import type { Register } from './router';
 import { UserRoles } from './utils/user-roles';
@@ -12,7 +12,7 @@ import TownsquareControlCard from './cards/TownsquareControlCard';
 import type { GameState } from './session';
 import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
-import { LatestQueue } from './utils/queue';
+import { LatestQueue, SequentialQueue } from './utils/queue';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -68,6 +68,7 @@ export class Renderer {
   private readonly open = $state(false);
   private readonly storytellerIdState = $state('');
   private readonly openQueue = new LatestQueue();
+  private readonly messagingQueue = new SequentialQueue();
 
   private cleanupCallback: (() => void) | null = null;
 
@@ -161,6 +162,7 @@ export class Renderer {
             this._voiceChannelId,
             this.storytellerId,
             this.register,
+            this.roleId.toString(),
           );
 
           this.invite.set(
@@ -276,6 +278,19 @@ export class Renderer {
         type: 'role_id',
         value: '0',
         allow: open ? Permission.CONNECT_VOICE : 0,
+      });
+    });
+  }
+
+  /**
+   * 向城镇广场发送消息
+   */
+  sendMessageToTownsquare(type: ApiMessageType, content: string) {
+    this.messagingQueue.push(async () => {
+      await BOT.api.messageCreate({
+        target_id: this._townsquareChannelId,
+        type: type,
+        content: content,
       });
     });
   }

@@ -179,7 +179,7 @@ export class Router {
     // 用户已经在游戏里了，且加入的是自己游戏的频道
     if (userSession && channelSession && userSession === channelSession) {
       // 通知玩家进入语音频道
-      userSession.systemPlayerJoinVoiceChannel(user);
+      userSession.systemPlayerJoinVoiceChannel(user, channel);
       return;
     }
 
@@ -188,7 +188,7 @@ export class Router {
 
     // 用户不在游戏内，加入游戏
     this.addUserToSession(channelSession, user);
-    channelSession.systemPlayerJoinVoiceChannel(user);
+    channelSession.systemPlayerJoinVoiceChannel(user, channel);
   }
 
   /**

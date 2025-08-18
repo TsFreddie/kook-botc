@@ -158,6 +158,8 @@ export class Session {
     // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
+    this.renderer.dynamicChannels?.hideLocations();
+    this.renderer.dynamicChannels?.showCottages();
   }
 
   storytellerGameDay() {
@@ -166,6 +168,8 @@ export class Session {
 
     this.state.phase.set(Phase.DAY);
     this.internalPlayerToTownsquare();
+    this.renderer.dynamicChannels?.hideLocations();
+    this.renderer.dynamicChannels?.hideCottages();
   }
 
   storytellerGameRoaming() {
@@ -173,8 +177,8 @@ export class Session {
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.ROAMING);
-
-    // TODO：开放地点的查看权限
+    this.renderer.dynamicChannels?.showLocations();
+    this.renderer.dynamicChannels?.showCottages();
   }
 
   storytellerGameNight() {
@@ -183,6 +187,8 @@ export class Session {
 
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
+    this.renderer.dynamicChannels?.hideLocations();
+    this.renderer.dynamicChannels?.showCottages();
   }
 
   storytellerGameRestart() {
@@ -206,6 +212,9 @@ export class Session {
 
     const players = this.players.map((p) => p.id);
     dynamicChannels.moveUsersToMainChannel(players);
+
+    this.renderer.dynamicChannels?.hideLocations();
+    this.renderer.dynamicChannels?.hideCottages();
   }
 
   storytellerForceVoiceChannel() {
@@ -296,7 +305,7 @@ export class Session {
     }
   }
 
-  systemPlayerJoinVoiceChannel(userId: string) {
+  systemPlayerJoinVoiceChannel(userId: string, channelId: string) {
     if (this.destroyed) return;
 
     this.activeUsers.add(userId);
@@ -312,6 +321,15 @@ export class Session {
     // 准备阶段加入语音的玩家会自动成为玩家
     if (this.allowAutoLeave() && !this.internalHasPlayer(userId)) {
       this.internalAddPlayer(userId);
+    }
+
+    // 如果加入频道的是玩家，且现在是夜晚，但是玩家加入的主频道，将玩家移动到小屋
+    if (
+      this.internalHasPlayer(userId) &&
+      this.state.phase.value === Phase.NIGHT &&
+      channelId === this.renderer.voiceChannelId
+    ) {
+      this.renderer.dynamicChannels?.roamUserToCottage(userId);
     }
   }
 

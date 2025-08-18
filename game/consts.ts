@@ -7,7 +7,7 @@ export const ROAMING_LOCATIONS = [
   { name: '🏛️ 遗迹', theme: 'primary' },
   { name: '📚 缮写室', theme: 'warning' },
   { name: '🌲 小树林', theme: 'primary' },
-  { name: '🏠 我的小屋', theme: 'info', isCottage: true },
+  { name: '🏠 玩家小屋', theme: 'info', isCottage: true },
   { name: '🏢 城镇广场', theme: 'danger', isMain: true },
 ];
 
