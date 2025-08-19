@@ -8,7 +8,7 @@
         "type": "section",
         "text": {
           "type": "kmarkdown",
-          "content": "**玩家列表**"
+          "content": "{{ data.header|json_escape }}"
         }
       }
 {% if data.countdown %}
@@ -49,6 +49,9 @@
     {% endfor %}
 {% endif %}
       ,{
+        "type": "divider"
+      },
+      {
         "type": "context",
         "elements": [
           {
@@ -58,9 +61,6 @@
         ]
       }
 {% if data.players and data.players|length > 0 %}
-      ,{
-        "type": "divider"
-      }
       {% for player in data.players %}
       ,{
         "type": "section",

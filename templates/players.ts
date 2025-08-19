@@ -5,6 +5,9 @@ export interface PlayersTemplateParams {
   /** 主题 */
   theme: ButtonTheme;
 
+  /** 卡片标题 */
+  header: string;
+
   /** 状态信息 */
   status: string;
 

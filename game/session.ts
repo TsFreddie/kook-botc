@@ -827,6 +827,9 @@ export class Session {
   locationSet(userId: string, locationId: number) {
     if (this.destroyed) return;
 
+    // 只有自由活动时可以使用地点按钮
+    if (!this.phase(Phase.ROAMING)) return;
+
     const dynamicChannels = this.renderer.dynamicChannels;
     if (!dynamicChannels) return;
 
@@ -966,6 +969,9 @@ export class Session {
   notifyUserLeave(userId: string) {
     if (this.destroyed) return;
 
+    // 用户已经退出，清理用户非活跃计时
+    this.clearUserInactivityTimer(userId);
+
     // 如果在准备阶段，退出的玩家会自动退出游戏
     if (this.isPreparing() && this.internalHasPlayer(userId)) {
       this.internalRemovePlayer(userId);
@@ -973,7 +979,6 @@ export class Session {
 
     // 如果存在的话，删除玩家的小屋
     this.renderer.dynamicChannels?.destroyCottageForUser(userId);
-
     this.updatePlayerList();
   }
 

@@ -44,7 +44,7 @@ class CardRenderer extends Card<Props> {
     // 根据列表模式设置状态和按钮
     switch (state.listMode.value) {
       case ListMode.STATUS:
-        status = '**状态调整**\n点击按钮切换玩家死亡状态';
+        status = '**(font)状态调整(font)[body]**\n点击按钮切换玩家死亡状态';
         groups.push([
           { text: '换座', theme: 'primary', value: '[st]ListSwap' },
           { text: '旁观', theme: 'info', value: '[st]ListSpectate' },
@@ -63,7 +63,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.SWAP:
-        status = '**换座模式**\n选择两名玩家交换座位';
+        status = '**(font)换座模式(font)[primary]**\n选择两名玩家交换座位';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'primary';
         action = state.list.value.some((item) => item.selected)
@@ -74,7 +74,8 @@ class CardRenderer extends Card<Props> {
 
       case ListMode.SPECTATE:
         const spectatorVoice = state.listArg.value === 1;
-        status = '**旁观调整**\n点击按钮切换玩家是否旁观，旁观者在游戏进行时将被禁言';
+        status =
+          '**(font)旁观调整(font)[info]**\n点击按钮切换玩家是否旁观，旁观者在游戏进行时将被禁言';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([
           { text: '　', theme: 'secondary' },
@@ -90,7 +91,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.MUTE:
-        status = '**禁言调整**\n点击按钮切换玩家禁言状态';
+        status = '**(font)禁言调整(font)[success]**\n点击按钮切换玩家禁言状态';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'success';
         action = { text: '禁言', theme: 'danger' };
@@ -98,7 +99,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.KICK:
-        status = '**踢出玩家**\n点击按钮踢出玩家';
+        status = '**(font)踢出玩家(font)[danger]**\n点击按钮踢出玩家';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'danger';
         action = { text: '踢出', theme: 'danger' };
@@ -106,7 +107,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.SPOTLIGHT:
-        status = '**上麦模式**\n选择玩家单独发言';
+        status = '**(font)上麦模式(font)[success]**\n选择玩家单独发言';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'success';
         action = { text: '上麦', theme: 'warning' };
@@ -114,7 +115,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.PRIVATE:
-        status = '**托梦工具**\n发送的聊天消息会单独发送给选择的玩家';
+        status = '**(font)托梦工具(font)[warning]**\n发送的聊天消息会单独发送给选择的玩家';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'warning';
         action = { text: '托梦', theme: 'warning' };
@@ -123,8 +124,8 @@ class CardRenderer extends Card<Props> {
 
       case ListMode.NOMINATE:
         status = state.list.value.some((item) => item.selected)
-          ? '**发起提名**\n点击按钮发起投票是否处决指定玩家'
-          : '**发起提名**\n点击按钮选择发起提名的玩家';
+          ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票是否处决指定玩家'
+          : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'danger';
         action = { text: '选择', theme: 'info' };
@@ -216,7 +217,10 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.PRIVATE:
-          if (item.selected) {
+          if (item.type === 'storyteller') {
+            // 说书人不能被托梦
+            action = 'none';
+          } else if (item.selected) {
             action = { text: '托梦中', theme: 'secondary' };
           }
           break;
@@ -241,7 +245,8 @@ class CardRenderer extends Card<Props> {
 
     const data: PlayersTemplateParams = {
       theme,
-      status: `城镇广场人数：${state.townsquareCount.value} / ${state.list.value.length}\n${status}`,
+      header: `**玩家列表** (font)(城镇广场人数：${state.townsquareCount.value} / ${state.list.value.length})(font)[secondary]`,
+      status,
       action,
       prefix: `[sp]${value}`,
       groups: groups.length > 0 ? groups : undefined,

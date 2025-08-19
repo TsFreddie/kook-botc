@@ -1,4 +1,4 @@
-const buttonText = '如果你已是「说书人」，点击**(font)【创建】(font)[primary]**按钮创建小镇';
+const buttonText = '如果你是「说书人」，点击**(font)【创建】(font)[primary]**按钮创建小镇';
 
 export const createActionCard = [
   {
