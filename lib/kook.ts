@@ -358,7 +358,7 @@ export class SignalHandler {
   private onEvent?: (signal: EventSignal) => void;
   private onHello?: (signal: HelloSignal) => void;
   private onPong?: (signal: PongSignal) => void;
-  private onReconnect?: (signal: ReconnectSignal) => void;
+  private onReconnect?: (signal: ReconnectSignal) => void | Promise<void>;
   private onResumeAck?: (signal: ResumeAckSignal) => void;
 
   constructor(debug: boolean = false) {
@@ -380,7 +380,7 @@ export class SignalHandler {
     this.onPong = handler;
   }
 
-  setReconnectHandler(handler: (signal: ReconnectSignal) => void): void {
+  setReconnectHandler(handler: (signal: ReconnectSignal) => void | Promise<void>): void {
     this.onReconnect = handler;
   }
 
@@ -443,7 +443,15 @@ export class SignalHandler {
 
       case SignalType.RECONNECT:
         if (this.onReconnect) {
-          this.onReconnect(signal as ReconnectSignal);
+          // Handle both sync and async reconnect handlers
+          const result = this.onReconnect(signal as ReconnectSignal);
+          if (result instanceof Promise) {
+            result.catch((error) => {
+              if (this.debug) {
+                console.error('[Signal] Reconnect handler error:', error);
+              }
+            });
+          }
         }
         break;
 
@@ -620,7 +628,6 @@ export class MessageSequencer {
   private messageBuffer: Map<number, BufferedMessage> = new Map();
   private debug: boolean;
   private onProcessMessage?: (signal: EventSignal) => void | Promise<void>;
-  private bufferTimeout: number = 30000; // 30 seconds buffer timeout
 
   constructor(debug: boolean = false) {
     this.debug = debug;
@@ -653,28 +660,26 @@ export class MessageSequencer {
       return;
     }
 
-    // Check if this is the next expected message
-    if (sn === this.lastProcessedSN + 1) {
-      // Process this message immediately
-      await this.processMessage(signal);
-      this.lastProcessedSN = sn;
+    // Always add message to buffer first
+    this.messageBuffer.set(sn, {
+      signal,
+      timestamp: Date.now(),
+    });
 
-      // Check buffer for subsequent messages
-      await this.processBufferedMessages();
-    } else {
-      // Out of order message - add to buffer
-      if (this.debug) {
-        console.log(`[Sequencer] Buffering out-of-order message SN: ${sn}`);
-      }
-
-      this.messageBuffer.set(sn, {
-        signal,
-        timestamp: Date.now(),
-      });
-
-      // Clean up old buffered messages
-      this.cleanupBuffer();
+    if (this.debug) {
+      console.log(`[Sequencer] Added message SN: ${sn} to buffer`);
     }
+
+    // Check buffer size and skip ahead if needed
+    if (this.messageBuffer.size > 10) {
+      console.warn(
+        `[Sequencer] Buffer size (${this.messageBuffer.size}) exceeded 10, skipping ahead`,
+      );
+      this.skipToNextAvailableMessage();
+    }
+
+    // Process messages in order from buffer
+    await this.processBufferedMessages();
   }
 
   /**
@@ -698,32 +703,50 @@ export class MessageSequencer {
   }
 
   /**
+   * Process all buffered messages regardless of order (used before reconnect)
+   */
+  async processAllBufferedMessages(): Promise<void> {
+    const sortedSNs = Array.from(this.messageBuffer.keys()).sort((a, b) => a - b);
+
+    for (const sn of sortedSNs) {
+      const bufferedMessage = this.messageBuffer.get(sn)!;
+
+      if (this.debug) {
+        console.log(`[Sequencer] Processing buffered message SN: ${sn} (forced processing)`);
+      }
+
+      await this.processMessage(bufferedMessage.signal);
+      this.messageBuffer.delete(sn);
+      this.lastProcessedSN = sn;
+    }
+  }
+
+  /**
+   * Skip ahead to the next available message when buffer is too large
+   */
+  private skipToNextAvailableMessage(): void {
+    const sortedSNs = Array.from(this.messageBuffer.keys()).sort((a, b) => a - b);
+
+    if (sortedSNs.length === 0) {
+      return;
+    }
+
+    // Find the first available message and skip to it
+    const nextAvailableSN = sortedSNs[0]!; // We know it exists because length > 0
+
+    if (this.debug) {
+      console.log(`[Sequencer] Skipping from SN ${this.lastProcessedSN} to ${nextAvailableSN - 1}`);
+    }
+
+    this.lastProcessedSN = nextAvailableSN - 1;
+  }
+
+  /**
    * Process a single message
    */
   private async processMessage(signal: EventSignal): Promise<void> {
     if (this.onProcessMessage) {
       await this.onProcessMessage(signal);
-    }
-  }
-
-  /**
-   * Clean up old buffered messages
-   */
-  private cleanupBuffer(): void {
-    const now = Date.now();
-    const toDelete: number[] = [];
-
-    for (const [sn, bufferedMessage] of this.messageBuffer) {
-      if (now - bufferedMessage.timestamp > this.bufferTimeout) {
-        toDelete.push(sn);
-      }
-    }
-
-    for (const sn of toDelete) {
-      if (this.debug) {
-        console.log(`[Sequencer] Removing expired buffered message SN: ${sn}`);
-      }
-      this.messageBuffer.delete(sn);
     }
   }
 
@@ -1316,12 +1339,46 @@ export class KookClient extends KookEventEmitter {
   }
 
   /**
+   * Process all buffered messages before reconnect, handling non-sequential messages
+   */
+  private async processAllBufferedMessagesBeforeReconnect(): Promise<void> {
+    const bufferStatus = this.sequencer.getBufferStatus();
+
+    if (bufferStatus.size === 0) {
+      return;
+    }
+
+    if (this.config.debug) {
+      console.log(`[Client] Processing ${bufferStatus.size} buffered messages before reconnect`);
+    }
+
+    // Check if messages are sequential from current position
+    const lastProcessedSN = this.sequencer.getLastProcessedSN();
+    const expectedNextSN = lastProcessedSN + 1;
+
+    if (bufferStatus.oldestSN !== expectedNextSN) {
+      console.warn(
+        `[Client] Non-sequential messages detected during reconnect. Expected SN: ${expectedNextSN}, oldest buffered SN: ${bufferStatus.oldestSN}. Jumping ahead to process all buffered messages.`,
+      );
+
+      // Jump ahead to process all buffered messages
+      this.sequencer.setLastProcessedSN(bufferStatus.oldestSN! - 1);
+    }
+
+    // Process all buffered messages
+    await this.sequencer.processAllBufferedMessages();
+  }
+
+  /**
    * Handle RECONNECT signal
    */
-  private handleReconnect(signal: ReconnectSignal): void {
+  private async handleReconnect(signal: ReconnectSignal): Promise<void> {
     if (this.config.debug) {
       console.log('[Client] Received RECONNECT signal:', signal.d);
     }
+
+    // Process all existing messages in buffer before reconnecting
+    await this.processAllBufferedMessagesBeforeReconnect();
 
     // Clear session and message queue as per documentation
     this.session.clearSession();
@@ -1553,8 +1610,6 @@ export class KookClient extends KookEventEmitter {
   getEventParser(): EventParser {
     return this.eventManager.getParser();
   }
-
-
 }
 
 /**
