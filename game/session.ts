@@ -5,7 +5,11 @@ import { CIRCLED_NUMBERS, ROAMING_LOCATIONS } from './consts';
 import { ApiMessageType } from '../lib/api';
 import { textCard } from '../templates/text';
 import { MUTES } from './utils/mutes';
-import { globalMessagingCard, privateMessagingCard } from '../templates/messaging';
+import {
+  globalMessagingCard,
+  privateMessagingCard,
+  townSquarePrivateCardHeader,
+} from '../templates/messaging';
 import { MessageType, type TextMessageEvent } from '../lib/events';
 import { imageModule, markdownModule, textModule } from '../templates/modules';
 
@@ -145,7 +149,7 @@ export class Session {
   private register: Register;
   private destroyed = false;
   private greeted = new Set<string>();
-  private userInfoCards = new Map<string, any[]>();
+  private userInfoCards = new Map<string, { seq: number; card: any[] }>();
 
   /** 是否允许旁观者在游戏过程中发言 */
   private spectatorVoice = false;
@@ -399,7 +403,7 @@ export class Session {
       // 托梦中，显示托梦信息
       this.state.storytellerCardHeader.set(privateMessagingCard(privateTarget));
       this.state.storytellerCards.length = 0;
-      this.state.storytellerCards.push(...(this.userInfoCards.get(privateTarget) ?? []));
+      this.state.storytellerCards.push(...(this.userInfoCards.get(privateTarget)?.card ?? []));
       this.state.storytellerCardTheme.set('warning');
     } else {
       // 非托梦中，显示公共信息
@@ -820,7 +824,27 @@ export class Session {
     if (!privateTarget) return;
 
     this.userInfoCards.delete(privateTarget);
+    this.sendPrivateCard(privateTarget);
     this.updateMessagingCard();
+  }
+
+  /**
+   * 玩家点击了刷新按钮
+   */
+  protected playerRefreshPrivate(userId: string, seq: string) {
+    const info = this.userInfoCards.get(userId);
+    if (!info) {
+      if (seq !== '0') {
+        this.sendPrivateCard(userId);
+      }
+      return;
+    }
+
+    // 玩家的消息已经是最新的什么都不用干
+    if (info.seq.toString() === seq) {
+      return;
+    }
+    this.sendPrivateCard(userId);
   }
 
   // Location actions
@@ -999,6 +1023,37 @@ export class Session {
     return this.internalHasPlayer(userId);
   }
 
+  private sendPrivateCard(userId: string) {
+    console.log('Sending Card!');
+    const privateInfo = this.userInfoCards.get(userId) ?? {
+      seq: 0,
+      card: [],
+    };
+    this.renderer.userCard.update(userId, {
+      content: JSON.stringify([
+        {
+          type: 'card',
+          theme: 'warning',
+          size: 'lg',
+          modules: [
+            ...townSquarePrivateCardHeader(privateInfo.seq.toString(), userId),
+            ...(privateInfo.card.length == 0
+              ? [
+                  {
+                    type: 'section',
+                    text: {
+                      type: 'kmarkdown',
+                      content: `(font)卡片上空空如也...(font)[tips]`,
+                    },
+                  },
+                ]
+              : privateInfo.card),
+          ],
+        },
+      ]),
+    });
+  }
+
   handleStorytellerMessage(event: TextMessageEvent) {
     if (this.destroyed) return;
 
@@ -1041,15 +1096,20 @@ export class Session {
     if (!modules) return;
 
     if (privateTarget) {
-      let privateCard = this.userInfoCards.get(privateTarget);
-      if (!privateCard) {
-        privateCard = [];
-        this.userInfoCards.set(privateTarget, privateCard);
+      let privateInfo = this.userInfoCards.get(privateTarget);
+      if (!privateInfo) {
+        privateInfo = {
+          seq: 1,
+          card: [],
+        };
+        this.userInfoCards.set(privateTarget, privateInfo);
       }
-      if (privateCard.length >= 10) {
-        privateCard.shift();
+      if (privateInfo.card.length >= 10) {
+        privateInfo.card.shift();
       }
-      privateCard.push(...modules);
+      privateInfo.card.push(...modules);
+      privateInfo.seq++;
+      this.sendPrivateCard(privateTarget);
     } else {
       if (this.state.townsquareCards.length >= 10) {
         this.state.townsquareCards.shift();

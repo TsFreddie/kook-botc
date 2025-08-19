@@ -15,7 +15,8 @@ import { DynamicChannels } from './utils/dynamic-channels';
 import { LatestQueue, SequentialQueue } from './utils/queue';
 import StorytellerPlayerListCard from './cards/StorytellerPlayerListCard';
 import MessagingCard from './cards/MessagingCard';
-import { townSquareGlobalCard } from '../templates/messaging';
+import { townSquareGlobalCard, townSquarePrivateCardDefault } from '../templates/messaging';
+import { UserCard } from './utils/userCard';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -43,6 +44,8 @@ export class Renderer {
   private _storytellerChannelId = '';
   private _townsquareChannelId = '';
   private _voiceChannelId = '';
+  private _userCard;
+  private _dynamicChannels?: DynamicChannels;
 
   private cards: {
     storyteller: CardState<object>[];
@@ -51,8 +54,6 @@ export class Renderer {
 
   private roleId = -1;
   private rendererState = RendererState.None;
-
-  public dynamicChannels?: DynamicChannels;
 
   // Public getters for accessing private properties
   get storytellerChannelId() {
@@ -64,13 +65,18 @@ export class Renderer {
   get voiceChannelId() {
     return this._voiceChannelId;
   }
+  get userCard() {
+    return this._userCard;
+  }
+  get dynamicChannels() {
+    return this._dynamicChannels;
+  }
 
   private roles = new UserRoles();
 
   private readonly invite = $state('');
   private readonly open = $state(false);
   private readonly storytellerIdState = $state('');
-  private readonly openQueue = new LatestQueue();
   private readonly messagingQueue = new SequentialQueue();
 
   private cleanupCallback: (() => void) | null = null;
@@ -85,6 +91,17 @@ export class Renderer {
       .padStart(5, '0')}`;
     this.name.set(townName);
     this.storytellerIdState.set(storytellerId);
+
+    this._userCard = new UserCard({
+      content: JSON.stringify([
+        {
+          type: 'card',
+          theme: 'secondary',
+          size: 'lg',
+          modules: townSquarePrivateCardDefault,
+        },
+      ]),
+    });
 
     // 配置动态卡片
     this.cards = {
@@ -139,6 +156,7 @@ export class Renderer {
             },
           },
         }),
+        this._userCard,
         TownsquareControlCard({
           invite: this.invite,
           phase: this.state.phase,
@@ -198,7 +216,7 @@ export class Renderer {
           this.register.addChannel(this._voiceChannelId);
 
           // 动态频道配置
-          this.dynamicChannels = new DynamicChannels(
+          this._dynamicChannels = new DynamicChannels(
             this._voiceChannelId,
             this.storytellerId,
             this.register,
@@ -208,6 +226,14 @@ export class Renderer {
           this.invite.set(
             (await BOT.api.inviteCreate({ channel_id: this._voiceChannelId, duration: 86400 })).url,
           );
+
+          // 始终允许房间内的玩家主动加入
+          await BOT.api.channelRoleUpdate({
+            channel_id: this._voiceChannelId,
+            type: 'role_id',
+            value: this.roleId.toString(),
+            allow: Permission.CONNECT_VOICE,
+          });
         })(),
       ]);
 
@@ -226,12 +252,12 @@ export class Renderer {
       await Promise.allSettled([
         (async () => {
           for (const card of this.cards.storyteller) {
-            await card.$card.mount(this._storytellerChannelId);
+            await card.$mount(this._storytellerChannelId);
           }
         })(),
         (async () => {
           for (const card of this.cards.townsquare) {
-            await card.$card.mount(this._townsquareChannelId);
+            await card.$mount(this._townsquareChannelId);
           }
         })(),
       ]);
@@ -321,12 +347,13 @@ export class Renderer {
   setOpen(open: boolean) {
     if (this.open.value == open) return;
     this.open.set(open);
-    this.openQueue.push(async () => {
+    this.messagingQueue.push(async () => {
       await BOT.api.channelRoleUpdate({
         channel_id: this._voiceChannelId,
         type: 'role_id',
         value: '0',
         allow: open ? Permission.CONNECT_VOICE : 0,
+        deny: open ? 0 : Permission.CONNECT_VOICE,
       });
     });
   }
@@ -385,7 +412,6 @@ export class Renderer {
     }
 
     // 停止队列
-    await this.openQueue.destroy(true);
     await this.messagingQueue.destroy(true);
 
     // 卸载邀请链接
@@ -401,13 +427,13 @@ export class Renderer {
 
     // 优先销毁所有卡片队列，不再进行更新，并且等待正在更新的消息更新完毕
     await Promise.allSettled([
-      ...this.cards.storyteller.map((card) => card.$card.destroy()),
-      ...this.cards.townsquare.map((card) => card.$card.destroy()),
+      ...this.cards.storyteller.map((card) => card.$destroy()),
+      ...this.cards.townsquare.map((card) => card.$destroy()),
     ]);
 
     // 销毁所有动态频道
-    if (this.dynamicChannels) {
-      await this.dynamicChannels.destroy();
+    if (this._dynamicChannels) {
+      await this._dynamicChannels.destroy();
     }
 
     // 销毁所有频道，不在乎是否失败，因为有可能是因为报错了才触发的，尽量跑就行

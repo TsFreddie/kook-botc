@@ -728,16 +728,6 @@ export interface DeleteMessageReactionParams {
 }
 
 /**
- * Parameters for sending pipe message
- */
-export interface SendPipeMessageParams {
-  access_token: string;
-  type?: ApiMessageType;
-  target_id?: string;
-  content?: any; // Can be string or object depending on template usage
-}
-
-/**
  * Message creation response
  */
 export interface MessageCreateResponse {
@@ -1035,6 +1025,7 @@ export class KookApiClient {
     endpoint: string,
     method: 'GET' | 'POST' = 'GET',
     params?: Record<string, any>,
+    timeoutMs: number = 5000, // 5 second timeout
   ): Promise<KookApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
@@ -1065,34 +1056,80 @@ export class KookApiClient {
       }
     }
 
+    // Helper function to determine if error is a network/timeout error (not HTTP error)
+    const isNetworkError = (error: any): boolean => {
+      // Check for common network error patterns
+      if (error.name === 'AbortError') return true; // Timeout
+      if (error.name === 'TypeError' && error.message.includes('fetch')) return true; // Network error
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') return true; // DNS/Connection errors
+      if (error.message.includes('network') || error.message.includes('timeout')) return true;
+      return false;
+    };
+
+    // Helper function to make a single request attempt
+    const makeRequestAttempt = async (): Promise<KookApiResponse<T>> => {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(requestUrl, {
+          method,
+          headers,
+          body,
+          signal: abortController.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = (await response.json()) as KookApiResponse<T>;
+
+        if (data.code !== 0) {
+          throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
+        }
+
+        if (this.debug) {
+          console.log(`[API] Response:`, data);
+          console.log(`[API] Headers:`, response.headers);
+        }
+
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    };
+
+    // First attempt
     try {
-      const response = await fetch(requestUrl, {
-        method,
-        headers,
-        body,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as KookApiResponse<T>;
-
-      if (data.code !== 0) {
-        throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
-      }
-
-      if (this.debug) {
-        console.log(`[API] Response:`, data);
-        console.log(`[API] Headers:`, response.headers);
-      }
-
-      return data;
+      return await makeRequestAttempt();
     } catch (error) {
       if (this.debug) {
-        console.error(`[API] Request failed:`, error);
+        console.error(`[API] Request failed (attempt 1):`, error);
       }
-      throw error;
+
+      // Only retry for network/timeout errors, not HTTP errors
+      if (isNetworkError(error)) {
+        if (this.debug) {
+          console.log(`[API] Retrying request due to network error...`);
+        }
+
+        // Second attempt (retry once)
+        try {
+          return await makeRequestAttempt();
+        } catch (retryError) {
+          if (this.debug) {
+            console.error(`[API] Request failed (attempt 2):`, retryError);
+          }
+          throw retryError;
+        }
+      } else {
+        // Don't retry HTTP errors or API errors
+        throw error;
+      }
     }
   }
 
@@ -1102,6 +1139,7 @@ export class KookApiClient {
   private async makeFormDataRequest<T>(
     endpoint: string,
     formData: FormData,
+    timeoutMs: number = 60000, // 60 second timeout for file uploads
   ): Promise<KookApiResponse<T>> {
     const url = `${this.baseUrl}${endpoint}`;
 
@@ -1115,34 +1153,80 @@ export class KookApiClient {
       console.log(`[API] FormData:`, Array.from(formData.entries()));
     }
 
+    // Helper function to determine if error is a network/timeout error (not HTTP error)
+    const isNetworkError = (error: any): boolean => {
+      // Check for common network error patterns
+      if (error.name === 'AbortError') return true; // Timeout
+      if (error.name === 'TypeError' && error.message.includes('fetch')) return true; // Network error
+      if (error.code === 'ENOTFOUND' || error.code === 'ECONNREFUSED') return true; // DNS/Connection errors
+      if (error.message.includes('network') || error.message.includes('timeout')) return true;
+      return false;
+    };
+
+    // Helper function to make a single request attempt
+    const makeRequestAttempt = async (): Promise<KookApiResponse<T>> => {
+      const abortController = new AbortController();
+      const timeoutId = setTimeout(() => abortController.abort(), timeoutMs);
+
+      try {
+        const response = await fetch(url, {
+          method: 'POST',
+          headers,
+          body: formData,
+          signal: abortController.signal,
+        });
+
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+        }
+
+        const data = (await response.json()) as KookApiResponse<T>;
+
+        if (data.code !== 0) {
+          throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
+        }
+
+        if (this.debug) {
+          console.log(`[API] Response:`, data);
+          console.log(`[API] Headers:`, response.headers);
+        }
+
+        return data;
+      } catch (error) {
+        clearTimeout(timeoutId);
+        throw error;
+      }
+    };
+
+    // First attempt
     try {
-      const response = await fetch(url, {
-        method: 'POST',
-        headers,
-        body: formData,
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      const data = (await response.json()) as KookApiResponse<T>;
-
-      if (data.code !== 0) {
-        throw new Error(`API Error ${endpoint}\n${data.code}: ${data.message}`);
-      }
-
-      if (this.debug) {
-        console.log(`[API] Response:`, data);
-        console.log(`[API] Headers:`, response.headers);
-      }
-
-      return data;
+      return await makeRequestAttempt();
     } catch (error) {
       if (this.debug) {
-        console.error(`[API] Request failed:`, error);
+        console.error(`[API] Request failed (attempt 1):`, error);
       }
-      throw error;
+
+      // Only retry for network/timeout errors, not HTTP errors
+      if (isNetworkError(error)) {
+        if (this.debug) {
+          console.log(`[API] Retrying request due to network error...`);
+        }
+
+        // Second attempt (retry once)
+        try {
+          return await makeRequestAttempt();
+        } catch (retryError) {
+          if (this.debug) {
+            console.error(`[API] Request failed (attempt 2):`, retryError);
+          }
+          throw retryError;
+        }
+      } else {
+        // Don't retry HTTP errors or API errors
+        throw error;
+      }
     }
   }
 
@@ -1419,51 +1503,6 @@ export class KookApiClient {
    */
   async messageDeleteReaction(params: DeleteMessageReactionParams): Promise<void> {
     await this.makeRequest('/message/delete-reaction', 'POST', params);
-  }
-
-  /**
-   * Send pipe message
-   */
-  async messageSendPipe(params: SendPipeMessageParams): Promise<MessageCreateResponse> {
-    const { access_token, type, target_id, content } = params;
-
-    // Build query parameters
-    const queryParams: Record<string, any> = { access_token };
-    if (type !== undefined) queryParams.type = type;
-    if (target_id !== undefined) queryParams.target_id = target_id;
-
-    // Build URL with query parameters
-    const searchParams = new URLSearchParams();
-    Object.entries(queryParams).forEach(([key, value]) => {
-      if (value !== undefined && value !== null) {
-        searchParams.append(key, String(value));
-      }
-    });
-    const url = `${this.baseUrl}/message/send-pipemsg?${searchParams}`;
-
-    // Make request with content as body
-    const headers: Record<string, string> = {
-      Authorization: `Bot ${this.token}`,
-      'Content-Type': 'application/json',
-    };
-
-    const response = await fetch(url, {
-      method: 'POST',
-      headers,
-      body: typeof content === 'string' ? JSON.stringify({ content }) : JSON.stringify(content),
-    });
-
-    if (!response.ok) {
-      throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-    }
-
-    const data = (await response.json()) as KookApiResponse<MessageCreateResponse>;
-
-    if (data.code !== 0) {
-      throw new Error(`API Error ${data.code}: ${data.message}`);
-    }
-
-    return data.data;
   }
 
   /**

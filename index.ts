@@ -145,18 +145,25 @@ const createRoom = async (user: string, message: string) => {
   }
 };
 
+function parseButtonValue(value: string, prefix: string) {
+  const actionPart = value.slice(prefix.length);
+  const [actionName, ...args] = actionPart.split('|');
+  return { actionName, args };
+}
+
 // 按钮点击处理器
 BOT.onMessageBtnClick(async (event) => {
   const value = event.extra.body.value;
 
   if (value.startsWith('[rt]')) {
     // Router 事件
-    const handlerName = 'action' + value.slice(4); // Convert [rt]GameLeave to actionGameLeave
+    const { actionName, args } = parseButtonValue(value, '[rt]');
+    const handlerName = 'action' + actionName;
     const userId = event.extra.body.user_id;
     const channelId = event.extra.body.target_id;
     const handler = (ROUTER as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(ROUTER, userId, channelId);
+      await handler.call(ROUTER, userId, channelId, ...args);
     }
     return;
   }
@@ -166,17 +173,18 @@ BOT.onMessageBtnClick(async (event) => {
     const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
     if (!session) return;
 
-    const handlerName = 'storyteller' + value.slice(4); // Convert [st]GameStart to storytellerGameStart
+    const { actionName, args } = parseButtonValue(value, '[st]');
+    const handlerName = 'storyteller' + actionName;
     const handler = (session as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(session);
+      await handler.call(session, ...args);
     }
     return;
   }
 
   if (value.startsWith('[pl]')) {
     // 玩家操作，必须玩家在会话中才能操作
-    const userSession = ROUTER.getSessionByChannelId(event.extra.body.user_id);
+    const userSession = ROUTER.getSessionByUserId(event.extra.body.user_id);
     if (!userSession) return;
 
     // 只有在玩家所在的频道才能响应
@@ -188,11 +196,12 @@ BOT.onMessageBtnClick(async (event) => {
       return;
     }
 
-    const handlerName = 'player' + value.slice(4); // Convert [pl]GameLeave to playerGameLeave
+    const { actionName, args } = parseButtonValue(value, '[pl]');
+    const handlerName = 'player' + actionName;
     const userId = event.extra.body.user_id;
     const handler = (userSession as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(userSession, userId);
+      await handler.call(userSession, userId, ...args);
     }
     return;
   }

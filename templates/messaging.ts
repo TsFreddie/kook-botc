@@ -11,12 +11,12 @@ export const townSquareGlobalCard = [
   },
 ];
 
-export const townSquarePrivateCard = [
+export const townSquarePrivateCardDefault = [
   {
     type: 'section',
     text: {
       type: 'kmarkdown',
-      content: `**说书人托梦** - (font)该卡片信息仅你可见(font)[secondary]\n(font)(若重开客户端后数据丢失，可以点击刷新按钮重新获取)(font)[tips]`,
+      content: `**说书人托梦** - (font)该卡片信息仅你可见(font)[secondary]\n(font)(若重开后数据丢失，点击刷新按钮可重新获取)(font)[tips]`,
     },
     mode: 'right',
     accessory: {
@@ -27,7 +27,38 @@ export const townSquarePrivateCard = [
         content: '刷新',
       },
       click: 'return-val',
-      value: '[pl]RefreshPrivate',
+      value: '[pl]RefreshPrivate|0',
+    },
+  },
+  {
+    type: 'divider',
+  },
+  {
+    type: 'section',
+    text: {
+      type: 'kmarkdown',
+      content: `(font)卡片上空空如也...(font)[tips]`,
+    },
+  },
+];
+
+export const townSquarePrivateCardHeader = (seq: string, userId: string) => [
+  {
+    type: 'section',
+    text: {
+      type: 'kmarkdown',
+      content: `**说书人托梦** - (font)该卡片信息仅你可见(font)[secondary] (met)${userId}(met)}`,
+    },
+    mode: 'right',
+    accessory: {
+      type: 'button',
+      theme: 'info',
+      text: {
+        type: 'plain-text',
+        content: '刷新',
+      },
+      click: 'return-val',
+      value: `[pl]RefreshPrivate|${seq}`,
     },
   },
   {

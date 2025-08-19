@@ -1,5 +1,6 @@
 import { BOT } from '../../bot';
 import { ApiMessageType } from '../../lib/api';
+import type { Mountable } from './card';
 import { LatestQueue } from './queue';
 
 /**
@@ -7,7 +8,7 @@ import { LatestQueue } from './queue';
  *
  * 不会动态更新，可以单独给玩家发送消息
  */
-export abstract class UserCard {
+export class UserCard implements Mountable {
   private userQueue = new Map<string, LatestQueue>();
 
   private id: string = '';
@@ -20,7 +21,7 @@ export abstract class UserCard {
   ) {}
 
   /** 将卡片挂载到指定频道 */
-  async mount(targetId: string) {
+  async $mount(targetId: string) {
     if (this.destroyed) throw new Error('卡片已销毁');
     if (this.mounted) throw new Error('卡片已挂载');
     this.mounted = true;
@@ -45,7 +46,7 @@ export abstract class UserCard {
   }
 
   /** 向玩家发送卡片信息 */
-  private update(user: string, message: { content: string; template_id?: string }) {
+  update(user: string, message: { content: string; template_id?: string }) {
     if (this.destroyed) return;
     if (!this.mounted) {
       // 卡片尚未挂载，不进行渲染
@@ -54,12 +55,17 @@ export abstract class UserCard {
 
     const queue = this.getUserQueue(user);
     queue.push(async () => {
-      await BOT.api.messageUpdate({
-        msg_id: this.id,
-        content: message.content,
-        template_id: message.template_id,
-        temp_target_id: user,
-      });
+      try {
+        await BOT.api.messageUpdate({
+          msg_id: this.id,
+          content: message.content,
+          template_id: message.template_id,
+          temp_target_id: user,
+        });
+      } catch (err) {
+        // 用户卡片包含用户提供的数据，有可能被用户删除，不用管报错
+        console.error(err);
+      }
     });
   }
 
@@ -68,7 +74,7 @@ export abstract class UserCard {
    *
    * 销毁卡片不会删除消息，因为通常是直接删除频道
    */
-  async destroy() {
+  async $destroy() {
     if (this.destroyed) throw new Error('卡片已销毁');
     this.destroyed = true;
 

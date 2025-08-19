@@ -2,7 +2,12 @@ import { BOT } from '../../bot';
 import { ApiMessageType } from '../../lib/api';
 import { LatestQueue } from './queue';
 
-export type CardState<T extends object> = T & { $card: Card<T> };
+export interface Mountable {
+  $mount(targetId: string): Promise<void>;
+  $destroy(): Promise<void>;
+}
+
+export type CardState<T extends object> = T & Mountable;
 
 /**
  * 创建简单的状态包装
@@ -11,12 +16,14 @@ export type CardState<T extends object> = T & { $card: Card<T> };
 export const $card = <T extends object>(card: Card<T>): CardState<T> => {
   return new Proxy(card['state'] as CardState<T>, {
     get(target: T & CardState<T>, prop: string | symbol) {
-      if (prop === '$card') return card;
+      if (prop === '$mount') return card.mount.bind(card);
+      if (prop === '$destroy') return card.destroy.bind(card);
       return target[prop as keyof T];
     },
 
     set(target: T & CardState<T>, prop: string | symbol, value: any) {
-      if (prop === '$card') return false;
+      if (prop === '$mount') return false;
+      if (prop === '$destroy') return false;
 
       // 设置新值
       (target as any)[prop] = value;
@@ -34,7 +41,8 @@ export const $card = <T extends object>(card: Card<T>): CardState<T> => {
     },
 
     has(target: T & CardState<T>, prop: string | symbol) {
-      if (prop === '$card') return false;
+      if (prop === '$mount') return false;
+      if (prop === '$destroy') return false;
 
       return prop in target;
     },
