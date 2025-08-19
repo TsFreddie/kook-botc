@@ -44,7 +44,7 @@ class CardRenderer extends Card<Props> {
     // 根据列表模式设置状态和按钮
     switch (state.listMode.value) {
       case ListMode.STATUS:
-        status = '**(font)状态调整(font)[body]**\n点击按钮切换玩家死亡状态';
+        status = '**(font)状态调整(font)[body]**\n点击按钮切换玩家存活状态';
         groups.push([
           { text: '换座', theme: 'primary', value: '[st]ListSwap' },
           { text: '旁观', theme: 'info', value: '[st]ListSpectate' },

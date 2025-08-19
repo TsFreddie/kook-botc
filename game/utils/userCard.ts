@@ -1,7 +1,7 @@
 import { BOT } from '../../bot';
 import { ApiMessageType } from '../../lib/api';
 import type { Mountable } from './card';
-import { LatestQueue } from './queue';
+import { LatestQueue, SequentialQueue } from './queue';
 
 /**
  * 用户卡片消息管理
@@ -10,7 +10,7 @@ import { LatestQueue } from './queue';
  */
 export class UserCard implements Mountable {
   private userQueue = new Map<string, LatestQueue>();
-
+  private globalQueue = new SequentialQueue();
   private id: string = '';
   private mounted: boolean = false;
   private destroyed = false;
@@ -26,14 +26,16 @@ export class UserCard implements Mountable {
     if (this.mounted) throw new Error('卡片已挂载');
     this.mounted = true;
 
-    this.id = (
-      await BOT.api.messageCreate({
-        target_id: targetId,
-        type: ApiMessageType.CARD,
-        content: this.defaultMessage.content,
-        template_id: this.defaultMessage.template_id,
-      })
-    ).msg_id;
+    this.globalQueue.push(async () => {
+      this.id = (
+        await BOT.api.messageCreate({
+          target_id: targetId,
+          type: ApiMessageType.CARD,
+          content: this.defaultMessage.content,
+          template_id: this.defaultMessage.template_id,
+        })
+      ).msg_id;
+    });
   }
 
   private getUserQueue(user: string) {
@@ -53,14 +55,45 @@ export class UserCard implements Mountable {
       return;
     }
 
-    const queue = this.getUserQueue(user);
-    queue.push(async () => {
+    this.globalQueue.push(async () => {
+      const queue = this.getUserQueue(user);
+      // 不 await 所以整个 queue 可以很快的处理过去
+      queue.push(async () => {
+        try {
+          await BOT.api.messageUpdate({
+            msg_id: this.id,
+            content: message.content,
+            template_id: message.template_id,
+            temp_target_id: user,
+          });
+        } catch (err) {
+          // 用户卡片包含用户提供的数据，有可能被用户删除，不用管报错
+          console.error(err);
+        }
+      });
+    });
+  }
+
+  /** 更新卡片来重置玩家的消息 */
+  reset() {
+    if (this.destroyed) return;
+    if (!this.mounted) {
+      // 卡片尚未挂载，不进行渲染
+      return;
+    }
+
+    this.globalQueue.push(async () => {
+      // 停止所有用户 queue 并等待结束
+      await Promise.allSettled(
+        Array.from(this.userQueue.values()).map((queue) => queue.destroy(true)),
+      );
+      this.userQueue.clear();
+
       try {
         await BOT.api.messageUpdate({
           msg_id: this.id,
-          content: message.content,
-          template_id: message.template_id,
-          temp_target_id: user,
+          content: this.defaultMessage.content,
+          template_id: this.defaultMessage.template_id,
         });
       } catch (err) {
         // 用户卡片包含用户提供的数据，有可能被用户删除，不用管报错

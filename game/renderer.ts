@@ -116,6 +116,7 @@ export class Renderer {
           invite: this.invite,
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
+        
         }),
         StorytellerPlayerListCard({
           listMode: this.state.listMode,
@@ -226,14 +227,6 @@ export class Renderer {
           this.invite.set(
             (await BOT.api.inviteCreate({ channel_id: this._voiceChannelId, duration: 86400 })).url,
           );
-
-          // 始终允许房间内的玩家主动加入
-          await BOT.api.channelRoleUpdate({
-            channel_id: this._voiceChannelId,
-            type: 'role_id',
-            value: this.roleId.toString(),
-            allow: Permission.CONNECT_VOICE,
-          });
         })(),
       ]);
 
@@ -268,6 +261,14 @@ export class Renderer {
 
       // 开放配置好的频道
       await Promise.allSettled(lateCallbacks.map((cb) => cb()));
+
+      // 始终允许房间内的玩家主动加入
+      await BOT.api.channelRoleUpdate({
+        channel_id: this._voiceChannelId,
+        type: 'role_id',
+        value: this.roleId.toString(),
+        allow: Permission.CONNECT_VOICE,
+      });
 
       this.rendererState = RendererState.Initialized;
     } catch (err) {

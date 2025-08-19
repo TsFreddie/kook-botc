@@ -23,6 +23,12 @@ export enum Phase {
   /** 准备阶段 */
   PREPARING,
 
+  /** 准备阶段（好人胜利） */
+  FINISH_GOOD,
+
+  /** 准备阶段（坏人胜利） */
+  FINISH_BAD,
+
   /** 夜晚阶段 */
   NIGHT,
 
@@ -465,7 +471,7 @@ export class Session {
   }
 
   protected storytellerGameStart() {
-    if (!this.phase(Phase.PREPARING)) return;
+    if (!this.phase(Phase.PREPARING, Phase.FINISH_GOOD, Phase.FINISH_BAD)) return;
 
     // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
@@ -507,12 +513,10 @@ export class Session {
     this.updateMuteState();
   }
 
-  protected storytellerGameRestart() {
+  protected storytellerGameRestart(winner?: 'good' | 'bad') {
     // 初始化过程中不可重置游戏状态
-    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
+    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
-
-    // TODO: 如果重新开始时，玩家已经离开了。决定怎么办
 
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
@@ -522,15 +526,40 @@ export class Session {
       }
     }
 
+    // 重置玩家状态
+    this.players.forEach((p) => {
+      p.status = PlayerStatus.ALIVE;
+    });
+
     // 强制将所有玩家拉回广场语音
-    this.internalPlayerToTownsquare(true);
+    this.internalPlayerToTownsquare();
 
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.hideCottages();
 
-    this.state.phase.set(Phase.PREPARING);
+    switch (winner) {
+      case 'good':
+        this.state.phase.set(Phase.FINISH_GOOD);
+        break;
+      case 'bad':
+        this.state.phase.set(Phase.FINISH_BAD);
+        break;
+      default:
+        this.state.phase.set(Phase.PREPARING);
+        break;
+    }
+
     this.updateMuteState();
     this.updatePlayerList();
+
+    // 还原列表
+    this.storytellerListStatus();
+
+    // 清除所有玩家卡片
+    for (const userId of this.userInfoCards.keys()) {
+      this.userInfoCards.delete(userId);
+    }
+    this.renderer.userCard.reset();
   }
 
   protected storytellerForceVoiceChannel() {
@@ -1010,7 +1039,13 @@ export class Session {
    * @returns true 如果目前的状态允许玩家自动退出
    */
   isPreparing() {
-    return this.phase(Phase.PREPARING, Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING);
+    return this.phase(
+      Phase.PREPARING,
+      Phase.WAITING_FOR_STORYTELLER,
+      Phase.INITIALIZING,
+      Phase.FINISH_GOOD,
+      Phase.FINISH_BAD,
+    );
   }
 
   /**
@@ -1024,7 +1059,6 @@ export class Session {
   }
 
   private sendPrivateCard(userId: string) {
-    console.log('Sending Card!');
     const privateInfo = this.userInfoCards.get(userId) ?? {
       seq: 0,
       card: [],

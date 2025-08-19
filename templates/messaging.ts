@@ -47,7 +47,7 @@ export const townSquarePrivateCardHeader = (seq: string, userId: string) => [
     type: 'section',
     text: {
       type: 'kmarkdown',
-      content: `**说书人托梦** - (font)该卡片信息仅你可见(font)[secondary] (met)${userId}(met)}`,
+      content: `**说书人托梦** - (font)该卡片信息仅你可见(font)[secondary]`,
     },
     mode: 'right',
     accessory: {
