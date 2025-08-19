@@ -133,8 +133,10 @@ export class Router {
       throw new Error('会话不存在');
     }
 
-    const removed = data.users.delete(userId) || this.userMap.delete(userId);
-    if (!removed) return;
+    const userRemovedFromSession = data.users.delete(userId);
+    const userRemovedFromRouter = this.userMap.delete(userId);
+
+    if (!userRemovedFromSession && !userRemovedFromRouter) return;
 
     // 通知渲染器更新用户角色
     session.renderer.revokeUserRole(userId);
@@ -186,6 +188,7 @@ export class Router {
     const channelSession = this.getSessionByChannelId(channel);
 
     // 正在游戏中的玩家加入了另一个游戏的频道，踢出语音频道
+    // TODO：检测该玩家是不是正在进行游戏的玩家，如果不是的话直接撤了换权限
     if (channelSession && userSession && userSession !== channelSession) {
       // 踢出玩家，不用在乎报错
       BOT.api.channelKickout(channel, user).catch(console.error);
