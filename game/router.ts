@@ -184,15 +184,20 @@ export class Router {
    * 用户加入语音频道
    */
   systemUserJoinVoiceChannel(user: string, channel: string) {
-    const userSession = this.getSessionByUserId(user);
+    let userSession = this.getSessionByUserId(user);
     const channelSession = this.getSessionByChannelId(channel);
 
-    // 正在游戏中的玩家加入了另一个游戏的频道，踢出语音频道
-    // TODO：检测该玩家是不是正在进行游戏的玩家，如果不是的话直接撤了换权限
+    // 正在游戏中的玩家加入了另一个游戏的频道
     if (channelSession && userSession && userSession !== channelSession) {
-      // 踢出玩家，不用在乎报错
-      BOT.api.channelKickout(channel, user).catch(console.error);
-      return;
+      if (userSession.isPlaying(user)) {
+        // 玩家正在游戏，不能加入其他会话，直接踢出玩家，不用在乎报错
+        BOT.api.channelKickout(channel, user).catch(console.error);
+        return;
+      }
+
+      // 检测玩家为旁观玩家，直接退出正在旁观的会话
+      this.removeUserFromSession(userSession, user);
+      userSession = null;
     }
 
     // 用户已经在游戏里了，且加入的是自己游戏的频道

@@ -418,7 +418,7 @@ export class Session {
     this.state.list.set(players);
   }
 
-  storytellerGameStart() {
+  protected storytellerGameStart() {
     if (!this.phase(Phase.PREPARING)) return;
 
     // 进入夜晚阶段
@@ -429,7 +429,7 @@ export class Session {
     this.updateMuteState();
   }
 
-  storytellerGameDay() {
+  protected storytellerGameDay() {
     if (!this.phase(Phase.NIGHT, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
@@ -440,7 +440,7 @@ export class Session {
     this.updateMuteState();
   }
 
-  storytellerGameRoaming() {
+  protected storytellerGameRoaming() {
     if (!this.phase(Phase.DAY)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
@@ -450,7 +450,7 @@ export class Session {
     this.updateMuteState();
   }
 
-  storytellerGameNight() {
+  protected storytellerGameNight() {
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
@@ -461,7 +461,7 @@ export class Session {
     this.updateMuteState();
   }
 
-  storytellerGameRestart() {
+  protected storytellerGameRestart() {
     // 初始化过程中不可重置游戏状态
     if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
@@ -487,7 +487,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerForceVoiceChannel() {
+  protected storytellerForceVoiceChannel() {
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
     if (this.phase(Phase.NIGHT)) {
@@ -497,47 +497,49 @@ export class Session {
     }
   }
 
-  storytellerGameOpen() {
+  protected storytellerGameOpen() {
     this.renderer.setOpen(true);
   }
 
-  storytellerGameInviteOnly() {
+  protected storytellerGameInviteOnly() {
     this.renderer.setOpen(false);
   }
 
-  storytellerGameDelete() {
+  protected storytellerGameDelete() {
     if (this.destroyed) return;
 
     this.register.destroy();
   }
 
-  storytellerListStatus() {
-    // 从上麦状态退出时需要更新禁言状态
-    if (this.state.listMode.value === ListMode.SPOTLIGHT) {
-      this.updateMuteState();
-    }
+  protected storytellerListStatus() {
+    const previousListMode = this.state.listMode.value;
 
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.STATUS);
     this.updatePlayerList();
+
+    // 从上麦状态退出时需要更新禁言状态
+    if (previousListMode === ListMode.SPOTLIGHT) {
+      this.updateMuteState();
+    }
   }
 
-  storytellerListSwap() {
+  protected storytellerListSwap() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.SWAP);
     this.updatePlayerList();
   }
 
-  storytellerListSpectate() {
+  protected storytellerListSpectate() {
     this.listSelection = new Set();
     this.state.listArg.set(this.spectatorVoice ? 1 : 0);
     this.state.listMode.set(ListMode.SPECTATE);
     this.updatePlayerList();
   }
 
-  storytellerToggleSpectatorMute() {
+  protected storytellerToggleSpectatorMute() {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
     this.spectatorVoice = !this.spectatorVoice;
@@ -545,14 +547,14 @@ export class Session {
     this.updateMuteState();
   }
 
-  storytellerListKick() {
+  protected storytellerListKick() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.KICK);
     this.updatePlayerList();
   }
 
-  storytellerListMute() {
+  protected storytellerListMute() {
     this.listSelection = this.muteSet;
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.MUTE);
@@ -560,7 +562,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerListSpotlight() {
+  protected storytellerListSpotlight() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.SPOTLIGHT);
@@ -568,28 +570,28 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerListPrivate() {
+  protected storytellerListPrivate() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.PRIVATE);
     this.updatePlayerList();
   }
 
-  storytellerListNominate() {
+  protected storytellerListNominate() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.NOMINATE);
     this.updatePlayerList();
   }
 
-  storytellerLiteVote() {
+  protected storytellerLiteVote() {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.VOTE);
     this.updatePlayerList();
   }
 
-  storytellerSelectStatus(userId: string) {
+  protected storytellerSelectStatus(userId: string) {
     if (this.state.listMode.value !== ListMode.STATUS) return;
 
     const player = this.players.find((p) => p.id === userId);
@@ -610,7 +612,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectSwap(userId: string) {
+  protected storytellerSelectSwap(userId: string) {
     if (this.state.listMode.value !== ListMode.SWAP) return;
 
     if (!this.internalHasPlayer(userId)) return;
@@ -639,7 +641,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectSpectate(userId: string) {
+  protected storytellerSelectSpectate(userId: string) {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
     if (userId === this.storytellerId) return;
@@ -653,7 +655,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectKick(userId: string) {
+  protected storytellerSelectKick(userId: string) {
     if (this.state.listMode.value !== ListMode.KICK) return;
 
     // 不可以踢出说书人
@@ -662,7 +664,7 @@ export class Session {
     this.register.kick(userId);
   }
 
-  storytellerSelectMute(userId: string) {
+  protected storytellerSelectMute(userId: string) {
     if (this.state.listMode.value !== ListMode.MUTE) return;
 
     // 不可以禁言说书人
@@ -678,7 +680,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectSpotlight(userId: string) {
+  protected storytellerSelectSpotlight(userId: string) {
     if (this.state.listMode.value !== ListMode.SPOTLIGHT) return;
 
     // 说书人始终可以说话，所以说书人不能上麦
@@ -694,7 +696,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectPrivate(userId: string) {
+  protected storytellerSelectPrivate(userId: string) {
     if (this.state.listMode.value !== ListMode.PRIVATE) return;
 
     // 说书人不能托梦给自己
@@ -710,7 +712,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectNominate(userId: string) {
+  protected storytellerSelectNominate(userId: string) {
     if (this.state.listMode.value !== ListMode.NOMINATE) return;
 
     // TODO: 正式提名模式
@@ -727,7 +729,7 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerSelectVote(userId: string) {
+  protected storytellerSelectVote(userId: string) {
     if (this.state.listMode.value !== ListMode.VOTE) return;
 
     // 只有玩家可以投票
@@ -742,18 +744,18 @@ export class Session {
     this.updatePlayerList();
   }
 
-  storytellerVoteAdd() {
+  protected storytellerVoteAdd() {
     if (this.state.listMode.value !== ListMode.VOTE) return;
     // TODO: 实现投票+1逻辑
   }
 
-  storytellerVoteRemove() {
+  protected storytellerVoteRemove() {
     if (this.state.listMode.value !== ListMode.VOTE) return;
     // TODO: 实现投票-1逻辑
   }
 
   // Location actions
-  locationSet(userId: string, locationId: number) {
+  protected locationSet(userId: string, locationId: number) {
     if (this.destroyed) return;
 
     const dynamicChannels = this.renderer.dynamicChannels;
@@ -873,6 +875,11 @@ export class Session {
     }
   }
 
+  /**
+   * 若玩家目前在语音频道中，将玩家踢出语音频道
+   * @param userId
+   * @returns
+   */
   kickoutUser(userId: string) {
     if (this.destroyed) return;
 
@@ -906,6 +913,16 @@ export class Session {
    */
   isPreparing() {
     return this.phase(Phase.PREPARING, Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING);
+  }
+
+  /**
+   * 查询玩家是否是正在游戏的玩家
+   */
+  isPlaying(userId: string) {
+    // 说书人是重要玩家
+    if (userId === this.storytellerId) return true;
+
+    return this.internalHasPlayer(userId);
   }
 
   destroy() {
