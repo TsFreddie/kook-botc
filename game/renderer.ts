@@ -140,18 +140,23 @@ export class Renderer {
         })
       ).role_id;
 
+      let lateCallbacks: (() => Promise<void>)[] = [];
+
       // 创建频道
       const results = await Promise.allSettled([
         (async () => {
-          this._storytellerChannelId = (
-            await this.createTextChannel('⛲ 城镇广场(说书人)', ChannelMode.Storyteller)
-          ).id;
+          const storytellerChannel = await this.createTextChannel(
+            '⛲ 城镇广场(说书人)',
+            ChannelMode.Storyteller,
+          );
+          this._storytellerChannelId = storytellerChannel.channel.id;
           this.register.addChannel(this._storytellerChannelId);
+          lateCallbacks.push(storytellerChannel.permissionCallback);
 
-          this._townsquareChannelId = (
-            await this.createTextChannel('⛲ 城镇广场', ChannelMode.Player)
-          ).id;
+          const townsquareChannel = await this.createTextChannel('⛲ 城镇广场', ChannelMode.Player);
+          this._townsquareChannelId = townsquareChannel.channel.id;
           this.register.addChannel(this._townsquareChannelId);
+          lateCallbacks.push(townsquareChannel.permissionCallback);
         })(),
 
         (async () => {
@@ -210,6 +215,9 @@ export class Renderer {
       this.roles.grant(this.storytellerId, this.roleId);
       this.roles.grant(this.storytellerId, GAME.storytellerRoleId);
 
+      // 开放配置好的频道
+      await Promise.allSettled(lateCallbacks.map((cb) => cb()));
+
       this.rendererState = RendererState.Initialized;
     } catch (err) {
       console.error(err);
@@ -230,40 +238,46 @@ export class Renderer {
       parent_id: GAME.gameCategoryId,
     });
 
-    if (mode == ChannelMode.Player) {
-      const result = await Promise.allSettled([
-        // 允许玩家查看
-        BOT.api.channelRoleUpdate({
-          channel_id: channel.id,
-          type: 'role_id',
-          value: this.roleId.toString(),
-          allow: Permission.VIEW_CHANNELS,
-        }),
+    let permissionCallback = async () => {};
 
-        // 禁止说书人发言
-        BOT.api.channelRoleUpdate({
+    if (mode == ChannelMode.Player) {
+      permissionCallback = async () => {
+        const result = await Promise.allSettled([
+          // 允许玩家查看
+          BOT.api.channelRoleUpdate({
+            channel_id: channel.id,
+            type: 'role_id',
+            value: this.roleId.toString(),
+            allow: Permission.VIEW_CHANNELS,
+          }),
+
+          // 禁止说书人发言
+          BOT.api.channelRoleUpdate({
+            channel_id: channel.id,
+            type: 'user_id',
+            value: this.storytellerId,
+            deny: Permission.VIEW_CHANNELS,
+          }),
+        ]);
+
+        result.forEach((result) => {
+          if (result.status == 'rejected') {
+            console.error(result.reason);
+          }
+        });
+      };
+    } else if (mode == ChannelMode.Storyteller) {
+      permissionCallback = async () => {
+        // 仅允许说书人查看与发消息
+        await BOT.api.channelRoleUpdate({
           channel_id: channel.id,
           type: 'user_id',
           value: this.storytellerId,
-          deny: Permission.VIEW_CHANNELS,
-        }),
-      ]);
-
-      result.forEach((result) => {
-        if (result.status == 'rejected') {
-          console.error(result.reason);
-        }
-      });
-    } else if (mode == ChannelMode.Storyteller) {
-      // 仅允许说书人查看与发消息
-      await BOT.api.channelRoleUpdate({
-        channel_id: channel.id,
-        type: 'user_id',
-        value: this.storytellerId,
-        allow: Permission.VIEW_CHANNELS | Permission.SEND_MESSAGES,
-      });
+          allow: Permission.VIEW_CHANNELS | Permission.SEND_MESSAGES,
+        });
+      };
     }
-    return channel;
+    return { channel, permissionCallback };
   }
 
   /** 为用户授予游戏角色 */
