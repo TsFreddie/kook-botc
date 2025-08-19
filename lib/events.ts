@@ -316,31 +316,24 @@ export interface PinnedMessageEvent extends SystemMessageEvent {
 }
 
 /**
- * Union types for specific event categories
+ * All system events
  */
-export type UserEvent =
+export type SystemEvent =
   | JoinedChannelEvent
   | ExitedChannelEvent
   | UserUpdatedEvent
   | SelfJoinedGuildEvent
   | SelfExitedGuildEvent
-  | MessageBtnClickEvent;
-export type GuildEvent =
+  | MessageBtnClickEvent
   | UpdatedGuildEvent
   | DeletedGuildEvent
   | AddedBlockListEvent
   | DeletedBlockListEvent
-  | EmojiEvent;
-export type ChannelEvent =
+  | EmojiEvent
   | ReactionEvent
   | UpdatedMessageEvent
   | DeletedMessageEvent
   | PinnedMessageEvent;
-
-/**
- * All system events
- */
-export type SystemEvent = UserEvent | GuildEvent | ChannelEvent;
 
 /**
  * All possible events
@@ -450,104 +443,12 @@ export class EventParser {
 
     return systemEvent as SystemEvent;
   }
-
-  /**
-   * Get event category
-   */
-  getEventCategory(event: KookEvent): 'text' | 'user' | 'guild' | 'channel' | 'unknown' {
-    if (event.type !== MessageType.SYSTEM) {
-      return 'text';
-    }
-
-    const systemEvent = event as SystemEvent;
-    const eventType = systemEvent.extra.type;
-
-    // User events
-    if (
-      [
-        SystemEventType.JOINED_CHANNEL,
-        SystemEventType.EXITED_CHANNEL,
-        SystemEventType.USER_UPDATED,
-        SystemEventType.SELF_JOINED_GUILD,
-        SystemEventType.SELF_EXITED_GUILD,
-        SystemEventType.MESSAGE_BTN_CLICK,
-      ].includes(eventType)
-    ) {
-      return 'user';
-    }
-
-    // Guild events
-    if (
-      [
-        SystemEventType.UPDATED_GUILD,
-        SystemEventType.DELETED_GUILD,
-        SystemEventType.ADDED_BLOCK_LIST,
-        SystemEventType.DELETED_BLOCK_LIST,
-        SystemEventType.ADDED_EMOJI,
-        SystemEventType.REMOVED_EMOJI,
-        SystemEventType.UPDATED_EMOJI,
-      ].includes(eventType)
-    ) {
-      return 'guild';
-    }
-
-    // Channel events
-    if (
-      [
-        SystemEventType.ADDED_REACTION,
-        SystemEventType.DELETED_REACTION,
-        SystemEventType.UPDATED_MESSAGE,
-        SystemEventType.DELETED_MESSAGE,
-        SystemEventType.ADDED_CHANNEL,
-        SystemEventType.UPDATED_CHANNEL,
-        SystemEventType.DELETED_CHANNEL,
-        SystemEventType.PINNED_MESSAGE,
-        SystemEventType.UNPINNED_MESSAGE,
-      ].includes(eventType)
-    ) {
-      return 'channel';
-    }
-
-    return 'unknown';
-  }
-
-  /**
-   * Check if event is a direct message
-   */
-  isDirectMessage(event: KookEvent): boolean {
-    return event.channel_type === ChannelType.PERSON;
-  }
-
-  /**
-   * Check if event is from a guild
-   */
-  isGuildMessage(event: KookEvent): boolean {
-    return event.channel_type === ChannelType.GROUP;
-  }
-
-  /**
-   * Check if event mentions the bot
-   */
-  isBotMentioned(event: KookEvent, botId: string): boolean {
-    if (event.type === MessageType.SYSTEM) {
-      return false;
-    }
-
-    const textEvent = event as TextMessageEvent;
-    return textEvent.extra.mention_all || textEvent.extra.mention.includes(botId);
-  }
 }
 
 /**
  * Event handler type definitions
  */
 export type TextMessageHandler = (event: TextMessageEvent) => void | Promise<void>;
-export type SystemEventHandler = (event: SystemEvent) => void | Promise<void>;
-export type UserEventHandler = (event: UserEvent) => void | Promise<void>;
-export type GuildEventHandler = (event: GuildEvent) => void | Promise<void>;
-export type ChannelEventHandler = (event: ChannelEvent) => void | Promise<void>;
-
-
 
 // Specific event handlers
 export type JoinedChannelHandler = (event: JoinedChannelEvent) => void | Promise<void>;
@@ -616,12 +517,7 @@ export class TypedEventManager extends EventTarget {
       const systemEvent = event as SystemEvent;
       const eventType = systemEvent.extra.type;
 
-      // System event categories
-      const category = this.parser.getEventCategory(event);
-      this.dispatchEvent(new CustomEvent('systemEvent', { detail: systemEvent }));
-      this.dispatchEvent(new CustomEvent(category + 'Event', { detail: systemEvent }));
-
-      // Specific system event types
+      // Specific system event types only
       this.dispatchEvent(new CustomEvent(eventType, { detail: systemEvent }));
     }
   }
@@ -630,34 +526,6 @@ export class TypedEventManager extends EventTarget {
   onTextMessage(handler: TextMessageHandler): void {
     this.addEventListener('textMessage', (event: Event) => {
       const customEvent = event as CustomEvent<TextMessageEvent>;
-      this.safeExecuteHandler(() => handler(customEvent.detail));
-    });
-  }
-
-  onSystemEvent(handler: SystemEventHandler): void {
-    this.addEventListener('systemEvent', (event: Event) => {
-      const customEvent = event as CustomEvent<SystemEvent>;
-      this.safeExecuteHandler(() => handler(customEvent.detail));
-    });
-  }
-
-  onUserEvent(handler: UserEventHandler): void {
-    this.addEventListener('userEvent', (event: Event) => {
-      const customEvent = event as CustomEvent<UserEvent>;
-      this.safeExecuteHandler(() => handler(customEvent.detail));
-    });
-  }
-
-  onGuildEvent(handler: GuildEventHandler): void {
-    this.addEventListener('guildEvent', (event: Event) => {
-      const customEvent = event as CustomEvent<GuildEvent>;
-      this.safeExecuteHandler(() => handler(customEvent.detail));
-    });
-  }
-
-  onChannelEvent(handler: ChannelEventHandler): void {
-    this.addEventListener('channelEvent', (event: Event) => {
-      const customEvent = event as CustomEvent<ChannelEvent>;
       this.safeExecuteHandler(() => handler(customEvent.detail));
     });
   }
@@ -745,6 +613,4 @@ export class TypedEventManager extends EventTarget {
   getParser(): EventParser {
     return this.parser;
   }
-
-
 }

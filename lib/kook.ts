@@ -5,10 +5,6 @@ import {
   TypedEventManager,
   EventParser,
   type TextMessageHandler,
-  type SystemEventHandler,
-  type UserEventHandler,
-  type GuildEventHandler,
-  type ChannelEventHandler,
   type JoinedChannelHandler,
   type ExitedChannelHandler,
   type UserUpdatedHandler,
@@ -499,7 +495,7 @@ export class HeartbeatManager {
   private debug: boolean;
   private heartbeatTimer?: NodeJS.Timeout;
   private timeoutTimer?: NodeJS.Timeout;
-  private lastPongTime: number = 0;
+
   private isWaitingForPong: boolean = false;
   private onTimeout?: () => void;
   private onSendPing?: (sn: number) => void;
@@ -592,7 +588,6 @@ export class HeartbeatManager {
       console.log('[Heartbeat] Received PONG');
     }
 
-    this.lastPongTime = Date.now();
     this.isWaitingForPong = false;
 
     // Clear timeout timer
@@ -600,20 +595,6 @@ export class HeartbeatManager {
       clearTimeout(this.timeoutTimer);
       this.timeoutTimer = undefined;
     }
-  }
-
-  /**
-   * Check if currently waiting for PONG
-   */
-  isWaitingForPongResponse(): boolean {
-    return this.isWaitingForPong;
-  }
-
-  /**
-   * Get last PONG timestamp
-   */
-  getLastPongTime(): number {
-    return this.lastPongTime;
   }
 }
 
@@ -1041,17 +1022,6 @@ export class KookEventEmitter {
   }
 
   /**
-   * Add one-time event listener
-   */
-  once<K extends keyof KookEventMap>(event: K, listener: KookEventMap[K]): void {
-    const onceWrapper = (...args: any[]) => {
-      this.off(event, onceWrapper as KookEventMap[K]);
-      (listener as Function)(...args);
-    };
-    this.on(event, onceWrapper as KookEventMap[K]);
-  }
-
-  /**
    * Emit event to all listeners
    */
   emit<K extends keyof KookEventMap>(event: K, ...args: Parameters<KookEventMap[K]>): void {
@@ -1071,31 +1041,6 @@ export class KookEventEmitter {
         }
       }
     }
-  }
-
-  /**
-   * Remove all listeners for an event
-   */
-  removeAllListeners<K extends keyof KookEventMap>(event?: K): void {
-    if (event) {
-      this.listeners.delete(event);
-      if (this.debug) {
-        console.log(`[Events] Removed all listeners for: ${event}`);
-      }
-    } else {
-      this.listeners.clear();
-      if (this.debug) {
-        console.log('[Events] Removed all listeners');
-      }
-    }
-  }
-
-  /**
-   * Get listener count for an event
-   */
-  listenerCount<K extends keyof KookEventMap>(event: K): number {
-    const eventListeners = this.listeners.get(event);
-    return eventListeners ? eventListeners.length : 0;
   }
 }
 
@@ -1289,10 +1234,7 @@ export class KookClient extends KookEventEmitter {
    */
   private async processAllBufferedMessagesBeforeReconnect(): Promise<void> {
     const bufferStatus = this.sequencer.getBufferStatus();
-
-    if (bufferStatus.size === 0) {
-      return;
-    }
+    if (bufferStatus.size === 0) return;
 
     if (this.config.debug) {
       console.log(`[Client] Processing ${bufferStatus.size} buffered messages before reconnect`);
@@ -1306,12 +1248,10 @@ export class KookClient extends KookEventEmitter {
       console.warn(
         `[Client] Non-sequential messages detected during reconnect. Expected SN: ${expectedNextSN}, oldest buffered SN: ${bufferStatus.oldestSN}. Jumping ahead to process all buffered messages.`,
       );
-
       // Jump ahead to process all buffered messages
       this.sequencer.setLastProcessedSN(bufferStatus.oldestSN! - 1);
     }
 
-    // Process all buffered messages
     await this.sequencer.processAllBufferedMessages();
   }
 
@@ -1467,34 +1407,6 @@ export class KookClient extends KookEventEmitter {
   }
 
   /**
-   * Register handler for system events
-   */
-  onSystemEvent(handler: SystemEventHandler): void {
-    this.eventManager.onSystemEvent(handler);
-  }
-
-  /**
-   * Register handler for user events
-   */
-  onUserEvent(handler: UserEventHandler): void {
-    this.eventManager.onUserEvent(handler);
-  }
-
-  /**
-   * Register handler for guild events
-   */
-  onGuildEvent(handler: GuildEventHandler): void {
-    this.eventManager.onGuildEvent(handler);
-  }
-
-  /**
-   * Register handler for channel events
-   */
-  onChannelEvent(handler: ChannelEventHandler): void {
-    this.eventManager.onChannelEvent(handler);
-  }
-
-  /**
    * Register handler for user joined channel events
    */
   onJoinedChannel(handler: JoinedChannelHandler): void {
@@ -1555,152 +1467,5 @@ export class KookClient extends KookEventEmitter {
    */
   getEventParser(): EventParser {
     return this.eventManager.getParser();
-  }
-}
-
-/**
- * Custom error classes for better error handling
- */
-export class KookError extends Error {
-  constructor(
-    message: string,
-    public code?: number,
-  ) {
-    super(message);
-    this.name = 'KookError';
-  }
-}
-
-export class KookConnectionError extends KookError {
-  constructor(message: string, code?: number) {
-    super(message, code);
-    this.name = 'KookConnectionError';
-  }
-}
-
-export class KookAuthenticationError extends KookError {
-  constructor(message: string, code?: number) {
-    super(message, code);
-    this.name = 'KookAuthenticationError';
-  }
-}
-
-export class KookTimeoutError extends KookError {
-  constructor(message: string) {
-    super(message);
-    this.name = 'KookTimeoutError';
-  }
-}
-
-/**
- * Logger utility for consistent logging
- */
-export class Logger {
-  private debug: boolean;
-  private prefix: string;
-
-  constructor(prefix: string = '[Kook]', debug: boolean = false) {
-    this.prefix = prefix;
-    this.debug = debug;
-  }
-
-  log(message: string, ...args: any[]): void {
-    if (this.debug) {
-      console.log(`${this.prefix} ${message}`, ...args);
-    }
-  }
-
-  warn(message: string, ...args: any[]): void {
-    if (this.debug) {
-      console.warn(`${this.prefix} ${message}`, ...args);
-    }
-  }
-
-  error(message: string, ...args: any[]): void {
-    if (this.debug) {
-      console.error(`${this.prefix} ${message}`, ...args);
-    }
-  }
-
-  info(message: string, ...args: any[]): void {
-    if (this.debug) {
-      console.info(`${this.prefix} ${message}`, ...args);
-    }
-  }
-}
-
-/**
- * Configuration validator
- */
-export class ConfigValidator {
-  static validateConfig(config: KookClientConfig): void {
-    if (!config.token) {
-      throw new KookError('Token is required');
-    }
-
-    if (typeof config.token !== 'string' || config.token.trim().length === 0) {
-      throw new KookError('Token must be a non-empty string');
-    }
-
-    if (config.heartbeatInterval !== undefined) {
-      if (typeof config.heartbeatInterval !== 'number' || config.heartbeatInterval < 1000) {
-        throw new KookError('Heartbeat interval must be at least 1000ms');
-      }
-    }
-
-    if (config.heartbeatTimeout !== undefined) {
-      if (typeof config.heartbeatTimeout !== 'number' || config.heartbeatTimeout < 1000) {
-        throw new KookError('Heartbeat timeout must be at least 1000ms');
-      }
-    }
-
-    if (config.reconnectBackoffBase !== undefined) {
-      if (typeof config.reconnectBackoffBase !== 'number' || config.reconnectBackoffBase < 100) {
-        throw new KookError('Reconnect backoff base must be at least 100ms');
-      }
-    }
-
-    if (config.reconnectBackoffMax !== undefined) {
-      if (typeof config.reconnectBackoffMax !== 'number' || config.reconnectBackoffMax < 1000) {
-        throw new KookError('Reconnect backoff max must be at least 1000ms');
-      }
-    }
-  }
-}
-
-/**
- * Utility functions
- */
-export class KookUtils {
-  /**
-   * Create a delay promise
-   */
-  static delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
-
-  /**
-   * Generate random jitter for heartbeat
-   */
-  static generateJitter(base: number, variance: number): number {
-    return base + (Math.random() * variance * 2 - variance);
-  }
-
-  /**
-   * Safe JSON parse
-   */
-  static safeJsonParse(text: string): any {
-    try {
-      return JSON.parse(text);
-    } catch {
-      return null;
-    }
-  }
-
-  /**
-   * Check if WebSocket is in a connected state
-   */
-  static isWebSocketConnected(ws?: WebSocket): boolean {
-    return ws !== undefined && ws.readyState === WebSocket.OPEN;
   }
 }
