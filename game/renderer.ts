@@ -14,6 +14,8 @@ import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
 import { LatestQueue, SequentialQueue } from './utils/queue';
 import StorytellerPlayerListCard from './cards/StorytellerPlayerListCard';
+import MessagingCard from './cards/MessagingCard';
+import { townSquareGlobalCard } from '../templates/messaging';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -107,12 +109,35 @@ export class Renderer {
           townsquareCount: this.state.townsquareCount,
           listArg: this.state.listArg,
         }),
+        MessagingCard({
+          theme: this.state.storytellerCardTheme,
+          first: this.state.storytellerCardHeader,
+          modules: this.state.storytellerCards,
+          empty: {
+            type: 'section',
+            text: {
+              type: 'kmarkdown',
+              content: `(font)卡片上空空如也...(font)[tips]`,
+            },
+          },
+        }),
       ],
 
       townsquare: [
         TownHeaderCard({
           name: this.name,
           invite: this.invite,
+        }),
+        MessagingCard({
+          first: $state(townSquareGlobalCard),
+          modules: this.state.townsquareCards,
+          empty: {
+            type: 'section',
+            text: {
+              type: 'kmarkdown',
+              content: `(font)说书人很懒，什么都没有留下...(font)[tips]`,
+            },
+          },
         }),
         TownsquareControlCard({
           invite: this.invite,
@@ -333,6 +358,19 @@ export class Renderer {
     });
   }
 
+  /**
+   * 删除一条消息
+   */
+  deleteMessage(messageId: string) {
+    this.messagingQueue.push(async () => {
+      try {
+        await BOT.api.messageDelete({ msg_id: messageId });
+      } catch {
+        // 删除的通常是用户消息，有可能被吞或被用户自己删除，没有那么重要，报错不用管
+      }
+    });
+  }
+
   /** 销毁渲染器，这会删除所有相关的角色与频道 */
   async destroy() {
     const state = this.rendererState;
@@ -348,6 +386,7 @@ export class Renderer {
 
     // 停止队列
     await this.openQueue.destroy(true);
+    await this.messagingQueue.destroy(true);
 
     // 卸载邀请链接
     try {

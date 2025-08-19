@@ -1,10 +1,13 @@
 import type { Register } from './router';
 import { Renderer } from './renderer';
-import { $state, CValue } from './utils/state';
+import { $array, $state, CValue, type CArray } from './utils/state';
 import { CIRCLED_NUMBERS, ROAMING_LOCATIONS } from './consts';
 import { ApiMessageType } from '../lib/api';
 import { textCard } from '../templates/text';
 import { MUTES } from './utils/mutes';
+import { globalMessagingCard, privateMessagingCard } from '../templates/messaging';
+import { MessageType, type TextMessageEvent } from '../lib/events';
+import { imageModule, markdownModule, textModule } from '../templates/modules';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -90,6 +93,14 @@ export interface GameState {
 
   /** 城镇广场人数 */
   townsquareCount: CValue<number>;
+
+  /** （说书人）托梦卡片数据 */
+  storytellerCardHeader: CValue<any>;
+  storytellerCardTheme: CValue<'warning' | 'secondary'>;
+  storytellerCards: CArray<any>;
+
+  /** （城镇广场）信息卡片数据 */
+  townsquareCards: CArray<any>;
 }
 
 /** 玩家状态 */
@@ -124,12 +135,17 @@ export class Session {
     votingEnd: $state(0),
     townsquareCount: $state(0),
     listArg: $state(0),
+    storytellerCardHeader: $state(globalMessagingCard),
+    storytellerCardTheme: $state('secondary'),
+    storytellerCards: $array([]),
+    townsquareCards: $array([]),
   };
 
   private players: PlayerState[] = [];
   private register: Register;
   private destroyed = false;
   private greeted = new Set<string>();
+  private userInfoCards = new Map<string, any[]>();
 
   /** 是否允许旁观者在游戏过程中发言 */
   private spectatorVoice = false;
@@ -149,6 +165,7 @@ export class Session {
     this.register = register;
 
     // 初始化完成后进入等待说书人状态
+    this.updateMessagingCard();
     this.state.phase.set(Phase.WAITING_FOR_STORYTELLER);
 
     // 给说书人 180 秒时间加入会话，不加入的话会自动销毁
@@ -369,6 +386,31 @@ export class Session {
   }
 
   /**
+   * 更新托梦卡片
+   */
+  private updateMessagingCard() {
+    let privateTarget: string | undefined;
+    if (this.state.listMode.value === ListMode.PRIVATE) {
+      // 托梦中，查找正在托梦的用户
+      privateTarget = this.listSelection.values().next().value;
+    }
+
+    if (privateTarget) {
+      // 托梦中，显示托梦信息
+      this.state.storytellerCardHeader.set(privateMessagingCard(privateTarget));
+      this.state.storytellerCards.length = 0;
+      this.state.storytellerCards.push(...(this.userInfoCards.get(privateTarget) ?? []));
+      this.state.storytellerCardTheme.set('warning');
+    } else {
+      // 非托梦中，显示公共信息
+      this.state.storytellerCardHeader.set(globalMessagingCard);
+      this.state.storytellerCards.length = 0;
+      this.state.storytellerCards.push(...this.state.townsquareCards);
+      this.state.storytellerCardTheme.set('secondary');
+    }
+  }
+
+  /**
    * 更新玩家列表数据
    */
   private updatePlayerList() {
@@ -523,6 +565,11 @@ export class Session {
     if (previousListMode === ListMode.SPOTLIGHT) {
       this.updateMuteState();
     }
+
+    // 从托梦状态退出时需要更新托梦卡片
+    if (previousListMode === ListMode.PRIVATE) {
+      this.updateMessagingCard();
+    }
   }
 
   protected storytellerListSwap() {
@@ -575,6 +622,9 @@ export class Session {
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.PRIVATE);
     this.updatePlayerList();
+
+    // 进入托梦状态时需要更新托梦卡片
+    this.updateMessagingCard();
   }
 
   protected storytellerListNominate() {
@@ -710,6 +760,9 @@ export class Session {
     }
 
     this.updatePlayerList();
+
+    // 更新托梦卡片
+    this.updateMessagingCard();
   }
 
   protected storytellerSelectNominate(userId: string) {
@@ -754,8 +807,24 @@ export class Session {
     // TODO: 实现投票-1逻辑
   }
 
+  protected storytellerClearGlobalCard() {
+    if (this.state.listMode.value === ListMode.PRIVATE) return;
+    this.state.townsquareCards.length = 0;
+    this.updateMessagingCard();
+  }
+
+  protected storytellerClearPrivateCard() {
+    if (this.state.listMode.value !== ListMode.PRIVATE) return;
+
+    const privateTarget = this.listSelection.values().next().value;
+    if (!privateTarget) return;
+
+    this.userInfoCards.delete(privateTarget);
+    this.updateMessagingCard();
+  }
+
   // Location actions
-  protected locationSet(userId: string, locationId: number) {
+  locationSet(userId: string, locationId: number) {
     if (this.destroyed) return;
 
     const dynamicChannels = this.renderer.dynamicChannels;
@@ -925,7 +994,69 @@ export class Session {
     return this.internalHasPlayer(userId);
   }
 
-  destroy() {
+  handleStorytellerMessage(event: TextMessageEvent) {
+    if (this.destroyed) return;
+
+    // 删除消息，作为已经接收的响应
+    this.renderer.deleteMessage(event.msg_id);
+
+    let privateTarget: string | undefined;
+
+    if (this.state.listMode.value === ListMode.PRIVATE) {
+      // 托梦中，查找正在托梦的用户
+      privateTarget = this.listSelection.values().next().value;
+    }
+
+    // 处理消息
+    let modules: any[] = [];
+
+    switch (event.type) {
+      case MessageType.TEXT:
+        modules.push(textModule(event.content));
+        break;
+      case MessageType.IMAGE:
+        modules.push(imageModule(event.content));
+        break;
+      case MessageType.KMARKDOWN:
+        modules.push(markdownModule(event.content));
+        break;
+      case MessageType.CARD:
+        try {
+          const cards = JSON.parse(event.content);
+          for (const card of cards) {
+            modules.push(...(card.modules ?? []));
+          }
+        } catch {
+          // ignored
+        }
+        break;
+    }
+
+    // 不支持的消息，无视
+    if (!modules) return;
+
+    if (privateTarget) {
+      let privateCard = this.userInfoCards.get(privateTarget);
+      if (!privateCard) {
+        privateCard = [];
+        this.userInfoCards.set(privateTarget, privateCard);
+      }
+      if (privateCard.length >= 10) {
+        privateCard.shift();
+      }
+      privateCard.push(...modules);
+    } else {
+      if (this.state.townsquareCards.length >= 10) {
+        this.state.townsquareCards.shift();
+      }
+      this.state.townsquareCards.push(...modules);
+    }
+
+    // 说书人发言时，更新托梦卡片
+    this.updateMessagingCard();
+  }
+
+  async destroy() {
     if (this.destroyed) return;
 
     this.destroyed = true;
@@ -944,6 +1075,6 @@ export class Session {
     // 清理会话空闲定时器
     this.clearSessionIdleTimer();
 
-    this.renderer.destroy();
+    return this.renderer.destroy();
   }
 }

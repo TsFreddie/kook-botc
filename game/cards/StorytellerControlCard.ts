@@ -2,7 +2,7 @@ import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { Phase } from '../session';
 import type { CValue } from '../utils/state';
-import type { ActionButton, ActionGroup } from '../../templates/types';
+import type { ActionGroup } from '../../templates/types';
 import { LOCATION_BUTTONS } from '../consts';
 
 interface Props {

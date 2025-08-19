@@ -6,6 +6,7 @@ import { onError as onQueueError } from './game/utils/queue.ts';
 import { ApiMessageType } from './lib/api.ts';
 import { introCard } from './templates/intro.ts';
 import { createActionCard, createdCard, creatingInfo, existedCard } from './templates/create.ts';
+import type { TextMessageEvent } from './lib/events.ts';
 
 BOT.on('error', (error) => {
   console.error('💥 机器人错误:', error);
@@ -57,9 +58,8 @@ process.on('unhandledRejection', (reason) => {
   shutdown();
 });
 
-// 文本消息处理器 - 处理 /setup 命令
-if (process.env.ADMIN_ID) {
-  BOT.onTextMessage(async (event) => {
+const processAdminCommand = async (event: TextMessageEvent) => {
+  if (process.env.ADMIN_ID) {
     if (event.author_id !== process.env.ADMIN_ID || event.content !== '/setup') {
       return;
     }
@@ -80,8 +80,35 @@ if (process.env.ADMIN_ID) {
       type: ApiMessageType.CARD,
       content: JSON.stringify(createActionCard),
     });
-  });
-}
+  }
+};
+
+const routeMessage = (event: TextMessageEvent) => {
+  const channel = event.target_id;
+  const user = event.author_id;
+  const userSession = ROUTER.getSessionByUserId(user);
+  // 说书人在说书人文本频道发言才可以托梦
+  if (
+    !userSession ||
+    userSession.storytellerId !== user ||
+    userSession.renderer.storytellerChannelId !== channel
+  )
+    return;
+
+  // 通知会话处理说书人消息
+  userSession.handleStorytellerMessage(event);
+};
+
+BOT.onTextMessage(async (event) => {
+  // 快速跳过机器人消息
+  if (event.extra.author.bot) return;
+
+  // 处理托梦
+  routeMessage(event);
+
+  // 处理 /setup 指令
+  await processAdminCommand(event);
+});
 
 // 创建房间逻辑
 const createRoom = async (user: string, message: string) => {

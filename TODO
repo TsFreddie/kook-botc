@@ -1,11 +1,5 @@
-- [x] Move restart button into townCard
-- [x] Make a dynamic player list system with a message queue that handles every player list related actions
-- [x] Auto voice channel creation (when roaming into a non-existent channel) and deletion (when cleanup) for roaming (everyone can visit in roaming mode) and cottage (only self and storyteller can visit)
-- [x] Add location buttons to controls in ROAMING mode for both storyteller and townsquare that moves user between channels
-- [ ] Private message (托梦) system where storytellers message will be forwarded to townsquare text channel. If listPrivate mode is on, then it will send a temp_target_id message to that player.
-- [ ] Add a mute set in session. Maintain the mute state with the mute set.
-
-MINOR TWEAKS:
-
-- [ ] If a user have gone inactive for 180 seconds, remove them from the game.
-- [ ] If a session have 0 active users for 10 seconds, destroy the session (this is more strict since it's rare that there is no active users for actual games)
+- [x] Private message (托梦) system where storytellers message will be forwarded to townsquare text channel. If listPrivate mode is on, then it will send a temp_target_id message to that player.
+- [ ] Make card mode more obvious, maybe change the title.
+- [ ] Player side player list
+- [ ] Voting system
+- [ ] Make player side card update not depend on list mode?

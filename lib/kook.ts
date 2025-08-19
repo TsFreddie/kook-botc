@@ -19,6 +19,7 @@ import {
 } from './events.ts';
 
 import { KookApiClient } from './api.ts';
+import zlib from 'zlib';
 
 /**
  * Signal types for WebSocket communication
@@ -394,11 +395,7 @@ export class SignalHandler {
   handleMessage(data: string | Buffer): void {
     try {
       let messageText: string;
-
-      // Handle compressed messages (binary data)
       if (data instanceof Buffer) {
-        // Decompress using zlib (deflate)
-        const zlib = require('zlib');
         messageText = zlib.inflateSync(data).toString('utf-8');
       } else {
         messageText = data as string;
@@ -963,57 +960,6 @@ export class SessionManager {
    */
   getSessionInfo(): SessionInfo | undefined {
     return this.sessionInfo;
-  }
-}
-
-/**
- * Compression utility for handling zlib compression/decompression
- */
-export class CompressionUtil {
-  private static zlib = require('zlib');
-  private debug: boolean;
-
-  constructor(debug: boolean = false) {
-    this.debug = debug;
-  }
-
-  /**
-   * Decompress binary data using zlib (deflate)
-   */
-  decompress(data: Buffer): string {
-    try {
-      const decompressed = CompressionUtil.zlib.inflateSync(data);
-      const result = decompressed.toString('utf-8');
-
-      if (this.debug) {
-        console.log(`[Compression] Decompressed ${data.length} bytes to ${result.length} chars`);
-      }
-
-      return result;
-    } catch (error) {
-      if (this.debug) {
-        console.error('[Compression] Decompression failed:', error);
-      }
-      throw new Error('Failed to decompress message');
-    }
-  }
-
-  /**
-   * Check if data is compressed (binary)
-   */
-  static isCompressed(data: any): data is Buffer {
-    return data instanceof Buffer;
-  }
-
-  /**
-   * Process WebSocket message data (compressed or uncompressed)
-   */
-  processMessage(data: string | Buffer): string {
-    if (CompressionUtil.isCompressed(data)) {
-      return this.decompress(data);
-    } else {
-      return data as string;
-    }
   }
 }
 

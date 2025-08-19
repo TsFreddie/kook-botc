@@ -114,8 +114,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.PRIVATE:
-        status =
-          '**托梦工具**\n点击按钮选中玩家，选中后发送的聊天消息会托梦给指定玩家（玩家只能看到最新一条消息）';
+        status = '**托梦工具**\n发送的聊天消息会单独发送给选择的玩家';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'warning';
         action = { text: '托梦', theme: 'warning' };

@@ -65,6 +65,10 @@ export abstract class Card<T extends object> {
 
   /** 存储状态监听器的映射，用于清理 */
   private stateListeners = new Map<string, Function>();
+  private destroyed = false;
+
+  /** 在更新消息时是否静默报错 */
+  protected suppressError = false;
 
   abstract render(state: T): {
     content: string;
@@ -73,10 +77,6 @@ export abstract class Card<T extends object> {
 
   constructor(state: T) {
     this.state = state;
-    this.setupStateListeners();
-  }
-
-  private setupStateListeners() {
     for (const [key, value] of Object.entries(this.state)) {
       this.registerStateListener(key, value);
     }
@@ -84,6 +84,8 @@ export abstract class Card<T extends object> {
 
   /** 注册单个状态监听器 */
   private registerStateListener(key: string, value: any) {
+    if (this.destroyed) return;
+
     // 先清理已存在的监听器
     this.unregisterStateListener(key);
 
@@ -116,6 +118,7 @@ export abstract class Card<T extends object> {
 
   /** 将卡片挂载到指定频道 */
   async mount(targetId: string) {
+    if (this.destroyed) throw new Error('卡片已销毁');
     if (this.mounted) throw new Error('卡片已挂载');
     this.mounted = true;
 
@@ -134,6 +137,7 @@ export abstract class Card<T extends object> {
 
   /** 更新卡片状态 */
   private update() {
+    if (this.destroyed) return;
     if (!this.mounted) {
       // 卡片尚未挂载，不进行渲染
       return;
@@ -141,11 +145,17 @@ export abstract class Card<T extends object> {
 
     this.queue.push(async () => {
       const rendered = this.render(this.state);
-      await BOT.api.messageUpdate({
-        msg_id: this.id,
-        content: rendered.content,
-        template_id: rendered.template_id,
-      });
+      try {
+        await BOT.api.messageUpdate({
+          msg_id: this.id,
+          content: rendered.content,
+          template_id: rendered.template_id,
+        });
+      } catch (err) {
+        if (!this.suppressError) {
+          throw err;
+        }
+      }
     });
   }
 
@@ -155,6 +165,9 @@ export abstract class Card<T extends object> {
    * 销毁卡片不会删除消息，因为通常是直接删除频道
    */
   async destroy() {
+    if (this.destroyed) throw new Error('卡片已销毁');
+    this.destroyed = true;
+
     // 清理所有状态监听器
     for (const key of this.stateListeners.keys()) {
       this.unregisterStateListener(key);

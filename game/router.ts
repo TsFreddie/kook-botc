@@ -268,7 +268,7 @@ export class Router {
     this.destroyed = true;
 
     for (const session of this.sessions.keys()) {
-      await session.renderer.destroy();
+      await session.destroy();
     }
   }
 }
