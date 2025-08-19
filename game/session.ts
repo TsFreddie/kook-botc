@@ -4,6 +4,7 @@ import { $state, CValue } from './utils/state';
 import { CIRCLED_NUMBERS, ROAMING_LOCATIONS } from './consts';
 import { ApiMessageType } from '../lib/api';
 import { textCard } from '../templates/text';
+import { MUTES } from './utils/mutes';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -77,6 +78,9 @@ export interface GameState {
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
 
+  /** 列表参数 见 StorytellerListCard */
+  listArg: CValue<number>;
+
   /** 投票信息 */
   voteInfo: CValue<string>;
 
@@ -94,7 +98,7 @@ interface PlayerState {
   status: PlayerStatus;
 }
 
-const SEP = ' (font)|(font)[tips] ';
+const SEP = '　';
 const statusToColumns = (status: PlayerStatus) => {
   switch (status) {
     case PlayerStatus.ALIVE:
@@ -119,6 +123,7 @@ export class Session {
     votingStart: $state(0),
     votingEnd: $state(0),
     townsquareCount: $state(0),
+    listArg: $state(0),
   };
 
   private players: PlayerState[] = [];
@@ -126,8 +131,14 @@ export class Session {
   private destroyed = false;
   private greeted = new Set<string>();
 
+  /** 是否允许旁观者在游戏过程中发言 */
+  private spectatorVoice = false;
+
   /** 列表的选择 */
   private listSelection = new Set<string>();
+
+  /** 禁言集合 */
+  private muteSet = new Set<string>();
 
   public readonly storytellerId: string;
   public readonly renderer: Renderer;
@@ -317,6 +328,47 @@ export class Session {
   }
 
   /**
+   * 更新禁言状态
+   */
+  private updateMuteState() {
+    // 对于在禁言集合中的用户，如果他们在活跃用户列表中，则禁言
+    // 对于不在禁言集合中的用户，如果他们在活跃用户列表中，则解除禁言
+    // 特殊情况：旁观者在非准备阶段也会被禁言
+    for (const userId of this.activeUsers.keys()) {
+      const shouldMute = this.shouldUserBeMuted(userId);
+
+      if (shouldMute) {
+        MUTES.mute(userId);
+      } else {
+        MUTES.unmute(userId);
+      }
+    }
+  }
+
+  /**
+   * 判断用户是否应该被禁言
+   */
+  private shouldUserBeMuted(userId: string): boolean {
+    // 说书人永远不会被禁言
+    if (userId === this.storytellerId) return false;
+
+    // 如果目前为上麦模式
+    if (this.state.listMode.value === ListMode.SPOTLIGHT) {
+      // 只有上麦用户可以发言，这种情况下，即使是被禁言的玩家，此时也可发言
+      return !this.listSelection.has(userId);
+    }
+
+    // 如果用户在禁言集合中，则应该被禁言
+    if (this.muteSet.has(userId)) return true;
+
+    // 如果禁止旁观者发言，且旁观者不在准备阶段，则应该被禁言
+    const isSpectator = !this.internalHasPlayer(userId) && userId !== this.storytellerId;
+    if (!this.spectatorVoice && isSpectator && !this.isPreparing()) return true;
+
+    return false;
+  }
+
+  /**
    * 更新玩家列表数据
    */
   private updatePlayerList() {
@@ -374,6 +426,7 @@ export class Session {
     this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
+    this.updateMuteState();
   }
 
   storytellerGameDay() {
@@ -384,6 +437,7 @@ export class Session {
     this.internalPlayerToTownsquare();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.hideCottages();
+    this.updateMuteState();
   }
 
   storytellerGameRoaming() {
@@ -393,6 +447,7 @@ export class Session {
     this.state.phase.set(Phase.ROAMING);
     this.renderer.dynamicChannels?.showLocations();
     this.renderer.dynamicChannels?.showCottages();
+    this.updateMuteState();
   }
 
   storytellerGameNight() {
@@ -403,6 +458,7 @@ export class Session {
     this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
+    this.updateMuteState();
   }
 
   storytellerGameRestart() {
@@ -410,7 +466,7 @@ export class Session {
     if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING, Phase.PREPARING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
-    // TODO: 如果重新开始时，玩家已经离开了
+    // TODO: 如果重新开始时，玩家已经离开了。决定怎么办
 
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
@@ -419,7 +475,6 @@ export class Session {
         this.players.splice(i, 1);
       }
     }
-    this.updatePlayerList();
 
     // 强制将所有玩家拉回广场语音
     this.internalPlayerToTownsquare(true);
@@ -428,6 +483,8 @@ export class Session {
     this.renderer.dynamicChannels?.hideCottages();
 
     this.state.phase.set(Phase.PREPARING);
+    this.updateMuteState();
+    this.updatePlayerList();
   }
 
   storytellerForceVoiceChannel() {
@@ -454,27 +511,81 @@ export class Session {
     this.register.destroy();
   }
 
+  storytellerListStatus() {
+    // 从上麦状态退出时需要更新禁言状态
+    if (this.state.listMode.value === ListMode.SPOTLIGHT) {
+      this.updateMuteState();
+    }
+
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.STATUS);
+    this.updatePlayerList();
+  }
+
   storytellerListSwap() {
-    this.listSelection.clear();
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
     this.state.listMode.set(ListMode.SWAP);
     this.updatePlayerList();
   }
 
   storytellerListSpectate() {
-    this.listSelection.clear();
+    this.listSelection = new Set();
+    this.state.listArg.set(this.spectatorVoice ? 1 : 0);
     this.state.listMode.set(ListMode.SPECTATE);
     this.updatePlayerList();
   }
 
-  storytellerListStatus() {
-    this.listSelection.clear();
-    this.state.listMode.set(ListMode.STATUS);
-    this.updatePlayerList();
+  storytellerToggleSpectatorMute() {
+    if (this.state.listMode.value !== ListMode.SPECTATE) return;
+
+    this.spectatorVoice = !this.spectatorVoice;
+    this.state.listArg.set(this.spectatorVoice ? 1 : 0);
+    this.updateMuteState();
   }
 
   storytellerListKick() {
-    this.listSelection.clear();
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
     this.state.listMode.set(ListMode.KICK);
+    this.updatePlayerList();
+  }
+
+  storytellerListMute() {
+    this.listSelection = this.muteSet;
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.MUTE);
+    this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  storytellerListSpotlight() {
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.SPOTLIGHT);
+    this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  storytellerListPrivate() {
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.PRIVATE);
+    this.updatePlayerList();
+  }
+
+  storytellerListNominate() {
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.NOMINATE);
+    this.updatePlayerList();
+  }
+
+  storytellerLiteVote() {
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.VOTE);
     this.updatePlayerList();
   }
 
@@ -551,6 +662,96 @@ export class Session {
     this.register.kick(userId);
   }
 
+  storytellerSelectMute(userId: string) {
+    if (this.state.listMode.value !== ListMode.MUTE) return;
+
+    // 不可以禁言说书人
+    if (userId === this.storytellerId) return;
+
+    if (this.muteSet.has(userId)) {
+      this.muteSet.delete(userId);
+    } else {
+      this.muteSet.add(userId);
+    }
+
+    this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  storytellerSelectSpotlight(userId: string) {
+    if (this.state.listMode.value !== ListMode.SPOTLIGHT) return;
+
+    // 说书人始终可以说话，所以说书人不能上麦
+    if (userId === this.storytellerId) return;
+
+    if (this.listSelection.has(userId)) {
+      this.listSelection.delete(userId);
+    } else {
+      this.listSelection.add(userId);
+    }
+
+    this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  storytellerSelectPrivate(userId: string) {
+    if (this.state.listMode.value !== ListMode.PRIVATE) return;
+
+    // 说书人不能托梦给自己
+    if (userId === this.storytellerId) return;
+
+    if (this.listSelection.has(userId)) {
+      this.listSelection.delete(userId);
+    } else {
+      this.listSelection.clear(); // 托梦只能选择一个玩家
+      this.listSelection.add(userId);
+    }
+
+    this.updatePlayerList();
+  }
+
+  storytellerSelectNominate(userId: string) {
+    if (this.state.listMode.value !== ListMode.NOMINATE) return;
+
+    // TODO: 正式提名模式
+    // 只有玩家可以被提名
+    if (!this.internalHasPlayer(userId)) return;
+
+    if (this.listSelection.has(userId)) {
+      this.listSelection.delete(userId);
+    } else {
+      this.listSelection.clear(); // 提名只能选择一个玩家
+      this.listSelection.add(userId);
+    }
+
+    this.updatePlayerList();
+  }
+
+  storytellerSelectVote(userId: string) {
+    if (this.state.listMode.value !== ListMode.VOTE) return;
+
+    // 只有玩家可以投票
+    if (!this.internalHasPlayer(userId)) return;
+
+    if (this.listSelection.has(userId)) {
+      this.listSelection.delete(userId);
+    } else {
+      this.listSelection.add(userId);
+    }
+
+    this.updatePlayerList();
+  }
+
+  storytellerVoteAdd() {
+    if (this.state.listMode.value !== ListMode.VOTE) return;
+    // TODO: 实现投票+1逻辑
+  }
+
+  storytellerVoteRemove() {
+    if (this.state.listMode.value !== ListMode.VOTE) return;
+    // TODO: 实现投票-1逻辑
+  }
+
   // Location actions
   locationSet(userId: string, locationId: number) {
     if (this.destroyed) return;
@@ -608,9 +809,15 @@ export class Session {
         );
       }
 
+      // 更新禁言状态
+      this.updateMuteState();
+
       // 说书人不会加入游戏
       return;
     }
+
+    // 更新禁言状态
+    this.updateMuteState();
 
     // 准备阶段加入语音的玩家会自动成为玩家
     if (this.isPreparing() && !this.internalHasPlayer(userId)) {
@@ -645,6 +852,9 @@ export class Session {
     this.activeUsers.delete(userId);
     this.townsquareUsers.delete(userId);
     this.updatePlayerList();
+
+    // 用户离开语音频道时解除禁言
+    MUTES.unmute(userId);
 
     // 设置用户不活跃定时器（包括说书人）
     this.setUserInactivityTimer(userId);
@@ -702,6 +912,11 @@ export class Session {
     if (this.destroyed) return;
 
     this.destroyed = true;
+
+    // 解除所有活跃用户的禁言
+    for (const userId of this.activeUsers.keys()) {
+      MUTES.unmute(userId);
+    }
 
     // 清理所有用户不活跃定时器
     for (const timer of this.userInactivityTimers.values()) {

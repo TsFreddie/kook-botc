@@ -6,7 +6,7 @@ export type ActionButton = {
   /** 按钮主题 */
   theme: ButtonTheme;
   /** 按钮返回值 */
-  value: string;
+  value?: string;
 };
 
 export type ActionGroup =
@@ -24,5 +24,5 @@ export type ButtonList = {
   /** 按钮描述 */
   desc: string;
   /** 按钮返回值 */
-  value: string;
+  value?: string;
 }[];

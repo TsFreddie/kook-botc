@@ -105,6 +105,7 @@ export class Renderer {
           votingStart: this.state.votingStart,
           votingEnd: this.state.votingEnd,
           townsquareCount: this.state.townsquareCount,
+          listArg: this.state.listArg,
         }),
       ],
 

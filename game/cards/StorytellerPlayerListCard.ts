@@ -13,6 +13,9 @@ interface Props {
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
 
+  /** 列表参数 */
+  listArg: CValue<number>;
+
   /** 投票信息 */
   voteInfo: CValue<string>;
 
@@ -52,6 +55,7 @@ class CardRenderer extends Card<Props> {
           { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
           { text: '提名', theme: 'danger', value: '[st]ListNominate' },
           { text: '投票', theme: 'primary', value: '[st]LiteVote' },
+          { text: '上麦', theme: 'success', value: '[st]ListSpotlight' },
         ]);
         theme = 'secondary';
         action = { text: '切换', theme: 'info' };
@@ -69,8 +73,17 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.SPECTATE:
-        status = '**旁观调整**\n点击按钮切换玩家是否旁观，旁观者不能参与游戏';
+        const spectatorVoice = state.listArg.value === 1;
+        status = '**旁观调整**\n点击按钮切换玩家是否旁观，旁观者在游戏进行时将被禁言';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        groups.push([
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
+          { text: '旁观语音', theme: 'secondary', value: '[st]ToggleSpectatorMute' },
+          spectatorVoice
+            ? { text: '设为禁止', theme: 'warning', value: '[st]ToggleSpectatorMute' }
+            : { text: '设为允许', theme: 'success', value: '[st]ToggleSpectatorMute' },
+        ]);
         theme = 'info';
         action = { text: '移出游戏', theme: 'danger' };
         value = 'Spectate';
@@ -79,7 +92,6 @@ class CardRenderer extends Card<Props> {
       case ListMode.MUTE:
         status = '**禁言调整**\n点击按钮切换玩家禁言状态';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
-        groups.push([{ text: '上麦模式', theme: 'warning', value: '[st]ListSpotlight' }]);
         theme = 'success';
         action = { text: '禁言', theme: 'danger' };
         value = 'Mute';
@@ -96,8 +108,7 @@ class CardRenderer extends Card<Props> {
       case ListMode.SPOTLIGHT:
         status = '**上麦模式**\n选择玩家单独发言';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
-        groups.push([{ text: '禁言调整', theme: 'success', value: '[st]ListMute' }]);
-        theme = 'warning';
+        theme = 'success';
         action = { text: '上麦', theme: 'warning' };
         value = 'Spotlight';
         break;
@@ -129,8 +140,10 @@ class CardRenderer extends Card<Props> {
             end: state.votingEnd.value,
           };
         }
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([
-          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
           { text: '-1', theme: 'info', value: '[st]VoteRemove' },
           { text: '+1', theme: 'info', value: '[st]VoteAdd' },
         ]);
@@ -138,6 +151,16 @@ class CardRenderer extends Card<Props> {
         value = 'Vote';
         break;
     }
+
+    // 确保所有按钮组都是4个
+    if (groups.length < 2) {
+      groups.push([]);
+    }
+    groups.forEach((group) => {
+      while (group.length < 4) {
+        (group as any).push({ text: '　', theme: 'secondary' });
+      }
+    });
 
     // 构建玩家列表
     const players = state.list.value.map((item: ListPlayerItem, index: number) => {
@@ -169,8 +192,11 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.MUTE:
-          if (item.selected) {
-            action = { text: '取消禁言', theme: 'secondary' };
+          if (item.type === 'storyteller') {
+            // 不能禁言说书人
+            action = 'none';
+          } else if (item.selected) {
+            action = { text: '取消禁言', theme: 'success' };
           }
           break;
 
@@ -182,8 +208,11 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.SPOTLIGHT:
-          if (item.selected) {
-            action = { text: '发言中', theme: 'secondary' };
+          if (item.type === 'storyteller') {
+            // 说书人始终可以发言
+            action = 'none';
+          } else if (item.selected) {
+            action = { text: '取消上麦', theme: 'secondary' };
           }
           break;
 

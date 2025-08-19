@@ -38,9 +38,11 @@
           "text": {
             "type": "plain-text",
             "content": "{{ button.text }}"
-          },
-          "click": "return-val",
+          }
+        {% if button.value %}
+          ,"click": "return-val",
           "value": "{{ button.value }}"
+        {% endif %}
         }
       }
     {% endfor %}
@@ -60,9 +62,11 @@
             "text": {
               "type": "plain-text",
               "content": "{{ button.text }}"
-            },
-            "click": "return-val",
+            }
+            {% if button.value %}
+            ,"click": "return-val",
             "value": "{{ button.value }}"
+            {% endif %}
           }
         {% endfor %}
         ]
