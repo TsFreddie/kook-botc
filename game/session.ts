@@ -12,6 +12,7 @@ import {
 } from '../templates/messaging';
 import { MessageType, type TextMessageEvent } from '../lib/events';
 import { imageModule, markdownModule, textModule } from '../templates/modules';
+import { BOT } from '../bot';
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -1088,7 +1089,7 @@ export class Session {
     });
   }
 
-  handleStorytellerMessage(event: TextMessageEvent) {
+  async handleStorytellerMessage(event: TextMessageEvent) {
     if (this.destroyed) return;
 
     // 删除消息，作为已经接收的响应
@@ -1104,26 +1105,62 @@ export class Session {
     // 处理消息
     let modules: any[] = [];
 
-    switch (event.type) {
-      case MessageType.TEXT:
-        modules.push(textModule(event.content));
-        break;
-      case MessageType.IMAGE:
-        modules.push(imageModule(event.content));
-        break;
-      case MessageType.KMARKDOWN:
-        modules.push(markdownModule(event.content));
-        break;
-      case MessageType.CARD:
-        try {
-          const cards = JSON.parse(event.content);
-          for (const card of cards) {
-            modules.push(...(card.modules ?? []));
+    const linkMatch = event.content.match(
+      /https:\/\/www\.kookapp\.cn\/direct\/anchor\/[0-9]+\/[0-9]+\/([0-9a-z-]{36})/,
+    );
+
+    if (linkMatch) {
+      try {
+        const msg_id = linkMatch[1];
+        if (msg_id) {
+          const message = await BOT.api.messageView({ msg_id });
+          switch (message.type) {
+            case ApiMessageType.TEXT:
+              modules.push(textModule(message.content));
+              break;
+            case ApiMessageType.IMAGE:
+              modules.push(imageModule(message.content));
+              break;
+            case ApiMessageType.KMARKDOWN:
+              modules.push(markdownModule(message.content));
+              break;
+            case ApiMessageType.CARD:
+              try {
+                const cards = JSON.parse(message.content);
+                for (const card of cards) {
+                  modules.push(...(card.modules ?? []));
+                }
+              } catch (error: any) {
+                modules.push(textModule(error?.message ?? error.toString() ?? '未知错误'));
+              }
+              break;
           }
-        } catch {
-          // ignored
         }
-        break;
+      } catch (error: any) {
+        modules.push(textModule(error?.message ?? error.toString() ?? '未知错误'));
+      }
+    } else {
+      switch (event.type) {
+        case MessageType.TEXT:
+          modules.push(textModule(event.content));
+          break;
+        case MessageType.IMAGE:
+          modules.push(imageModule(event.content));
+          break;
+        case MessageType.KMARKDOWN:
+          modules.push(markdownModule(event.content));
+          break;
+        case MessageType.CARD:
+          try {
+            const cards = JSON.parse(event.content);
+            for (const card of cards) {
+              modules.push(...(card.modules ?? []));
+            }
+          } catch {
+            // ignored
+          }
+          break;
+      }
     }
 
     // 不支持的消息，无视
