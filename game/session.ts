@@ -14,6 +14,40 @@ import { MessageType, type TextMessageEvent } from '../lib/events';
 import { imageModule, markdownModule, textModule } from '../templates/modules';
 import { BOT } from '../bot';
 
+/**
+ * Deep comparison utility for arrays and objects
+ */
+function deepEqual(a: any, b: any): boolean {
+  if (a === b) return true;
+
+  if (a == null || b == null) return a === b;
+
+  if (typeof a !== typeof b) return false;
+
+  if (Array.isArray(a) && Array.isArray(b)) {
+    if (a.length !== b.length) return false;
+    for (let i = 0; i < a.length; i++) {
+      if (!deepEqual(a[i], b[i])) return false;
+    }
+    return true;
+  }
+
+  if (typeof a === 'object' && typeof b === 'object') {
+    const keysA = Object.keys(a);
+    const keysB = Object.keys(b);
+
+    if (keysA.length !== keysB.length) return false;
+
+    for (const key of keysA) {
+      if (!keysB.includes(key)) return false;
+      if (!deepEqual(a[key], b[key])) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
+
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
   INITIALIZING = 0,
@@ -468,7 +502,11 @@ export class Session {
 
     // 更新城镇广场人数
     this.state.townsquareCount.set(this.townsquareUsers.size);
-    this.state.list.set(players);
+
+    // 只有在玩家列表实际发生变化时才更新
+    if (!deepEqual(this.state.list.value, players)) {
+      this.state.list.set(players);
+    }
 
     // 更新选择状态
     this.state.listSelected.length = 0;

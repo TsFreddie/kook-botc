@@ -26,7 +26,7 @@ export class UserCard implements Mountable {
     if (this.mounted) throw new Error('卡片已挂载');
     this.mounted = true;
 
-    this.globalQueue.push(async () => {
+    await this.globalQueue.push(async () => {
       this.id = (
         await BOT.api.messageCreate({
           target_id: targetId,
