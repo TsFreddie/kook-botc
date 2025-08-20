@@ -1006,6 +1006,238 @@ export interface BotOnlineStatus {
 }
 
 /**
+ * Thread category information
+ */
+export interface ThreadCategory {
+  id: string;
+  name: string;
+  allow: number;
+  deny: number;
+  roles: Array<{
+    type: 'user' | 'role';
+    role_id: number;
+    user_id: string;
+    allow: number;
+  }>;
+}
+
+/**
+ * Thread category list response
+ */
+export interface ThreadCategoryListResponse {
+  list: ThreadCategory[];
+}
+
+/**
+ * Thread status enum
+ */
+export enum ThreadStatus {
+  REVIEWING = 1, // 审核中
+  APPROVED = 2, // 审核通过
+  EDITING_REVIEW = 3, // 编辑审核中
+}
+
+/**
+ * Thread media information
+ */
+export interface ThreadMedia {
+  type: number;
+  src: string;
+  title: string;
+}
+
+/**
+ * Thread tag information
+ */
+export interface ThreadTag {
+  id: number;
+  name: string;
+  icon: string;
+}
+
+/**
+ * Thread user information
+ */
+export interface ThreadUser {
+  id: string;
+  identify_num: string;
+  username: string;
+  avatar: string;
+  is_vip: boolean;
+  vip_avatar: string;
+  nickname: string;
+  roles: number[];
+}
+
+/**
+ * Thread mention part information
+ */
+export interface ThreadMentionPart {
+  id: string;
+  username: string;
+  full_name: string;
+  avatar: string;
+}
+
+/**
+ * Thread mention role part information
+ */
+export interface ThreadMentionRolePart {
+  role_id: number;
+  name: string;
+  color: number;
+  position: number;
+  hoist: number;
+  mentionable: number;
+  permissions: number;
+}
+
+/**
+ * Thread information
+ */
+export interface Thread {
+  id: string;
+  status: ThreadStatus;
+  title: string;
+  cover: string;
+  category: ThreadCategory;
+  post_id: string;
+  medias: ThreadMedia[];
+  preview_content: string;
+  user: ThreadUser;
+  tags: ThreadTag[];
+  content: string;
+  mention: string[];
+  mention_all: boolean;
+  mention_here: boolean;
+  mention_part: ThreadMentionPart[];
+  mention_role_part: ThreadMentionRolePart[];
+  channel_part: any[];
+  item_part: any[];
+  latest_active_time?: number;
+  create_time?: number;
+  is_updated?: boolean;
+  content_deleted?: boolean;
+  content_deleted_type?: number;
+  collect_num?: number;
+  post_count?: number;
+}
+
+/**
+ * Thread post/reply information
+ */
+export interface ThreadPost {
+  id: string;
+  category_id: string;
+  thread_id: string;
+  reply_id: string;
+  belong_to_post_id: string;
+  content: string;
+  status: ThreadStatus;
+  mention: string[];
+  mention_all: boolean;
+  mention_here: boolean;
+  mention_part: ThreadMentionPart[];
+  mention_role_part: ThreadMentionRolePart[];
+  channel_part: any[];
+  item_part: any[];
+  create_time?: number;
+  is_updated?: boolean;
+  user?: ThreadUser;
+  replies?: ThreadPost[];
+}
+
+/**
+ * Parameters for getting thread category list
+ */
+export interface GetThreadCategoryListParams {
+  channel_id: string;
+}
+
+/**
+ * Parameters for creating a thread
+ */
+export interface CreateThreadParams {
+  channel_id: string;
+  guild_id: string;
+  category_id?: string;
+  title: string;
+  cover?: string;
+  content: string;
+}
+
+/**
+ * Parameters for replying to a thread
+ */
+export interface ThreadReplyParams {
+  channel_id: string;
+  thread_id: string;
+  reply_id?: string;
+  content: string;
+}
+
+/**
+ * Parameters for getting thread details
+ */
+export interface GetThreadParams {
+  channel_id: string;
+  thread_id: string;
+}
+
+/**
+ * Parameters for getting thread list
+ */
+export interface GetThreadListParams {
+  channel_id: string;
+  category_id?: string;
+  sort?: 1 | 2; // 1=最新回复, 2=最新创建
+  page_size?: number;
+  time?: number;
+}
+
+/**
+ * Thread list response
+ */
+export interface ThreadListResponse {
+  items: Thread[];
+}
+
+/**
+ * Parameters for deleting thread/post
+ */
+export interface DeleteThreadParams {
+  channel_id: string;
+  thread_id?: string;
+  post_id?: string;
+}
+
+/**
+ * Parameters for getting thread post list
+ */
+export interface GetThreadPostListParams {
+  channel_id: string;
+  thread_id: string;
+  post_id?: string;
+  time?: string;
+  page_size?: string;
+  order: 'asc' | 'desc';
+  page: string;
+}
+
+/**
+ * Thread post list response
+ */
+export interface ThreadPostListResponse {
+  meta: {
+    total: number;
+    page: number;
+    page_size: number;
+    page_total: number;
+  };
+  items: ThreadPost[];
+}
+
+/**
  * KOOK HTTP API Client
  */
 export class KookApiClient {
@@ -1614,6 +1846,61 @@ export class KookApiClient {
    */
   async userGetOnlineStatus(): Promise<BotOnlineStatus> {
     const response = await this.makeRequest<BotOnlineStatus>('/user/get-online-status', 'GET');
+    return response.data;
+  }
+
+  /**
+   * Get thread category list
+   */
+  async threadCategoryList(params: GetThreadCategoryListParams): Promise<ThreadCategoryListResponse> {
+    const response = await this.makeRequest<ThreadCategoryListResponse>('/category/list', 'GET', params);
+    return response.data;
+  }
+
+  /**
+   * Create a new thread
+   */
+  async threadCreate(params: CreateThreadParams): Promise<Thread> {
+    const response = await this.makeRequest<Thread>('/thread/create', 'POST', params);
+    return response.data;
+  }
+
+  /**
+   * Reply to a thread
+   */
+  async threadReply(params: ThreadReplyParams): Promise<ThreadPost> {
+    const response = await this.makeRequest<ThreadPost>('/thread/reply', 'POST', params);
+    return response.data;
+  }
+
+  /**
+   * Get thread details
+   */
+  async threadView(params: GetThreadParams): Promise<Thread> {
+    const response = await this.makeRequest<Thread>('/thread/view', 'GET', params);
+    return response.data;
+  }
+
+  /**
+   * Get thread list
+   */
+  async threadList(params: GetThreadListParams): Promise<ThreadListResponse> {
+    const response = await this.makeRequest<ThreadListResponse>('/thread/list', 'GET', params);
+    return response.data;
+  }
+
+  /**
+   * Delete thread or post
+   */
+  async threadDelete(params: DeleteThreadParams): Promise<void> {
+    await this.makeRequest('/thread/delete', 'POST', params);
+  }
+
+  /**
+   * Get thread post list (replies)
+   */
+  async threadPostList(params: GetThreadPostListParams): Promise<ThreadPostListResponse> {
+    const response = await this.makeRequest<ThreadPostListResponse>('/thread/post', 'GET', params);
     return response.data;
   }
 }
