@@ -18,7 +18,7 @@ class CardRenderer extends Card<Props> {
     let status: string = '';
     let mode: string = '';
     let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
-    let image = GAME.assets[state.phase.value === Phase.NIGHT ? 'night' : 'day'];
+    let image = GAME.assets['banner_day'];
 
     const groups: ActionGroup[] = [];
 
@@ -34,14 +34,17 @@ class CardRenderer extends Card<Props> {
       case Phase.FINISH_GOOD:
         mode = `(font)游戏结束 -(font)[secondary] (font)善良阵营胜利(font)[info]`;
         status = '小镇里不再有恶魔作祟了';
+        image = GAME.assets['banner_good'];
         break;
       case Phase.FINISH_BAD:
         mode = `(font)游戏结束 -(font)[secondary] (font)邪恶阵营胜利(font)[danger]`;
         status = '恶魔与爪牙已经彻底摧毁了小镇';
+        image = GAME.assets['banner_bad'];
         break;
       case Phase.NIGHT:
         mode = `(font)夜晚阶段(font)[secondary]`;
         status = '夜幕降临，你回到了自己的小屋';
+        image = GAME.assets['banner_night'];
         break;
       case Phase.DAY:
         mode = `(font)白天阶段 - 广场集会(font)[secondary]`;
@@ -50,6 +53,7 @@ class CardRenderer extends Card<Props> {
       case Phase.ROAMING:
         mode = `(font)白天阶段 - 自由活动(font)[secondary]`;
         status = '现在是自由活动时间\n(font)你可以前往其他地点了(font)[info]\n> 那么？要去哪里吗？';
+        image = GAME.assets['banner_roam'];
         groups.push(...LOCATION_BUTTONS);
         break;
     }

@@ -20,7 +20,7 @@ class CardRenderer extends Card<Props> {
     let status: string = '';
     let mode: string = '';
     let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
-    let image = GAME.assets[state.phase.value === Phase.NIGHT ? 'night' : 'day'];
+    let image = GAME.assets['banner_day'];
 
     const groups: ActionGroup[] = [];
 
@@ -36,10 +36,12 @@ class CardRenderer extends Card<Props> {
           case Phase.FINISH_GOOD:
             mode = `(font)游戏结束 -(font)[secondary] (font)善良阵营胜利(font)[info]`;
             status = '游戏已结束\n(font)玩家的托梦数据与存活状态已被重置(font)[warning]';
+            image = GAME.assets['banner_good'];
             break;
           case Phase.FINISH_BAD:
             mode = `(font)游戏结束 -(font)[secondary] (font)邪恶阵营胜利(font)[danger]`;
             status = '游戏已结束\n(font)玩家的托梦数据与存活状态已被重置(font)[warning]';
+            image = GAME.assets['banner_bad'];
             break;
           default:
             mode = `(font)准备阶段(font)[secondary]`;
@@ -62,6 +64,7 @@ class CardRenderer extends Card<Props> {
         mode = `(font)夜晚阶段(font)[secondary]`;
         status =
           '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)使用托梦功能为镇民提供信息，亦可前往小屋与镇民语音(font)[warning]';
+        image = GAME.assets['banner_night'];
         groups.push([
           { text: '🌅 黎明', theme: 'info', value: '[st]GameDay' },
           { text: '　', theme: 'secondary' },
@@ -83,6 +86,7 @@ class CardRenderer extends Card<Props> {
         mode = `(font)白天阶段 - 自由活动(font)[secondary]`;
         status =
           '现在是自由活动时间\n(font)你和镇民一样可以前往各地，同时你还可以前往玩家小屋(font)[warning]';
+        image = GAME.assets['banner_roam'];
         groups.push([
           { text: '🌠 夜幕', theme: 'info', value: '[st]GameNight' },
           { text: '广场集会', theme: 'warning', value: '[st]GameDay' },

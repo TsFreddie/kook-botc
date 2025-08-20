@@ -5,6 +5,7 @@ import { townsqareTwig } from './templates/townsquare.ts';
 import type { GameConfig } from './types.ts';
 import { Permission } from './lib/api.ts';
 import { playersTwig } from './templates/players.ts';
+import { ASSETS } from './lib/assets.ts';
 
 dotenv({ quiet: true });
 
@@ -51,30 +52,8 @@ export const LOG = async (msg: string) => {
 // 初始化流程（配置身份组和频道分组）
 const initialize = async () => {
   // 上传 Assets 文件夹
-  let existingAssets: Record<string, string> | null = null;
+  const assets = await ASSETS.uploadAllAssets();
 
-  try {
-    existingAssets = JSON.parse(await Bun.file('.assets.json').text());
-  } catch (e) {}
-
-  const uploadAsset = async (name: string, filename: string) => {
-    if (existingAssets && existingAssets[name]) {
-      return existingAssets[name];
-    }
-
-    const file = Bun.file(`./assets/${filename}`);
-    const response = await bot.api.assetCreate({ file });
-    console.log(`🔄 已上传素材: ${name}(${filename})`);
-    return response.url;
-  };
-
-  const assets = {
-    day: await uploadAsset('day', 'banner_day.png'),
-    night: await uploadAsset('night', 'banner_night.png'),
-  };
-
-  // 保存 Assets 数据
-  await Bun.write('.assets.json', JSON.stringify(assets));
   console.log(`🔄 已初始化素材`);
 
   // 检查是否存在模版

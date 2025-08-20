@@ -34,4 +34,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 .DS_Store
 
 # Persistents
-.assets.json
+assets.db
+assets.db-*
+
+# Tools
+tools
