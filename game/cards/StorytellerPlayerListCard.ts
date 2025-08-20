@@ -1,7 +1,7 @@
 import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
 import { ListMode, type ListPlayerItem } from '../session';
-import type { CValue } from '../utils/state';
+import type { CValue, CArray } from '../utils/state';
 import type { ActionGroup } from '../../templates/types';
 import type { PlayersTemplateParams } from '../../templates/players';
 import type { ButtonTheme } from '../../lib/api';
@@ -12,6 +12,9 @@ interface Props {
 
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
+
+  /** 列表选择状态 */
+  listSelected: CArray<string>;
 
   /** 列表参数 */
   listArg: CValue<number>;
@@ -66,7 +69,7 @@ class CardRenderer extends Card<Props> {
         status = '**(font)换座模式(font)[primary]**\n选择两名玩家交换座位';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'primary';
-        action = state.list.value.some((item) => item.selected)
+        action = state.listSelected.length > 0
           ? { text: '交换', theme: 'success' }
           : { text: '选择', theme: 'primary' };
         value = 'Swap';
@@ -123,7 +126,7 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.NOMINATE:
-        status = state.list.value.some((item) => item.selected)
+        status = state.listSelected.length > 0
           ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票是否处决指定玩家'
           : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
@@ -163,7 +166,8 @@ class CardRenderer extends Card<Props> {
     });
 
     // 构建玩家列表
-    const players = state.list.value.map((item: ListPlayerItem, index: number) => {
+    const selectedSet = new Set(state.listSelected);
+    const players = state.list.value.map((item: ListPlayerItem) => {
       let info = item.info;
       let action: { text: string; theme: ButtonTheme } | 'none' | undefined;
 
@@ -178,7 +182,7 @@ class CardRenderer extends Card<Props> {
           if (item.type !== 'player') {
             // 不是玩家不能换座
             action = 'none';
-          } else if (item.selected) {
+          } else if (selectedSet.has(item.id)) {
             action = { text: '已选择', theme: 'secondary' };
           }
           break;
@@ -195,7 +199,7 @@ class CardRenderer extends Card<Props> {
           if (item.type === 'storyteller') {
             // 不能禁言说书人
             action = 'none';
-          } else if (item.selected) {
+          } else if (selectedSet.has(item.id)) {
             action = { text: '取消禁言', theme: 'success' };
           }
           break;
@@ -211,7 +215,7 @@ class CardRenderer extends Card<Props> {
           if (item.type === 'storyteller') {
             // 说书人始终可以发言
             action = 'none';
-          } else if (item.selected) {
+          } else if (selectedSet.has(item.id)) {
             action = { text: '取消上麦', theme: 'secondary' };
           }
           break;
@@ -220,7 +224,7 @@ class CardRenderer extends Card<Props> {
           if (item.type === 'storyteller') {
             // 说书人不能被托梦
             action = 'none';
-          } else if (item.selected) {
+          } else if (selectedSet.has(item.id)) {
             action = { text: '托梦中', theme: 'secondary' };
           }
           break;
@@ -228,13 +232,13 @@ class CardRenderer extends Card<Props> {
         case ListMode.NOMINATE:
           if (item.type !== 'player') {
             action = 'none';
-          } else if (item.selected) {
+          } else if (selectedSet.has(item.id)) {
             action = { text: '提名者', theme: 'secondary' };
           }
           break;
 
         case ListMode.VOTE:
-          if (item.selected) {
+          if (selectedSet.has(item.id)) {
             action = { text: '切换', theme: 'secondary' };
           }
           break;

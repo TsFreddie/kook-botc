@@ -12,8 +12,9 @@ import TownsquareControlCard from './cards/TownsquareControlCard';
 import type { GameState } from './session';
 import type { CardState } from './utils/card';
 import { DynamicChannels } from './utils/dynamic-channels';
-import { LatestQueue, SequentialQueue } from './utils/queue';
+import { SequentialQueue } from './utils/queue';
 import StorytellerPlayerListCard from './cards/StorytellerPlayerListCard';
+import TownsquarePlayerListCard from './cards/TownsquarePlayerListCard';
 import MessagingCard from './cards/MessagingCard';
 import { townSquareGlobalCard, townSquarePrivateCardDefault } from '../templates/messaging';
 import { UserCard } from './utils/userCard';
@@ -116,11 +117,11 @@ export class Renderer {
           invite: this.invite,
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
-        
         }),
         StorytellerPlayerListCard({
           listMode: this.state.listMode,
           list: this.state.list,
+          listSelected: this.state.listSelected,
           voteInfo: this.state.voteInfo,
           votingStart: this.state.votingStart,
           votingEnd: this.state.votingEnd,
@@ -161,6 +162,15 @@ export class Renderer {
         TownsquareControlCard({
           invite: this.invite,
           phase: this.state.phase,
+        }),
+        TownsquarePlayerListCard({
+          voting: this.state.voting,
+          list: this.state.list,
+          listArg: this.state.listArg,
+          voteInfo: this.state.voteInfo,
+          votingStart: this.state.votingStart,
+          votingEnd: this.state.votingEnd,
+          townsquareCount: this.state.townsquareCount,
         }),
       ],
     };

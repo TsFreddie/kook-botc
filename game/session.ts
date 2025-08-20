@@ -75,7 +75,6 @@ export interface ListPlayerItem {
   id: string;
   info: string;
   joined: boolean;
-  selected: boolean;
 }
 
 /** 游戏状态 */
@@ -91,6 +90,9 @@ export interface GameState {
 
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
+
+  /** 列表选择状态 */
+  listSelected: CArray<string>;
 
   /** 列表参数 见 StorytellerListCard */
   listArg: CValue<number>;
@@ -141,6 +143,7 @@ export class Session {
     listMode: $state(ListMode.STATUS),
     voting: $state(false),
     list: $state([]),
+    listSelected: $array([]),
     voteInfo: $state(''),
     votingStart: $state(0),
     votingEnd: $state(0),
@@ -434,7 +437,6 @@ export class Session {
         id: p.id,
         joined: joinedPlayers.has(p.id),
         info: `(font)${CIRCLED_NUMBERS[index] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'body' : 'tips'}]${SEP}${statusToColumns(p.status)}${SEP}(met)${p.id}(met)`,
-        selected: this.listSelection.has(p.id),
       };
     });
 
@@ -443,7 +445,6 @@ export class Session {
       id: this.storytellerId,
       joined: joinedPlayers.has(this.storytellerId),
       info: `(font)说书人(font)[${this.townsquareUsers.has(this.storytellerId) ? 'warning' : 'tips'}]${SEP}(met)${this.storytellerId}(met)`,
-      selected: this.listSelection.has(this.storytellerId),
     });
 
     // 添加旁观玩家（有会话权限但不在游戏中的用户）
@@ -462,13 +463,16 @@ export class Session {
         id: userId,
         joined: true,
         info: `(font)旁观者(font)[tips]${SEP}(met)${userId}(met)`,
-        selected: this.listSelection.has(userId),
       });
     });
 
     // 更新城镇广场人数
     this.state.townsquareCount.set(this.townsquareUsers.size);
     this.state.list.set(players);
+
+    // 更新选择状态
+    this.state.listSelected.length = 0;
+    this.state.listSelected.push(...Array.from(this.listSelection));
   }
 
   protected storytellerGameStart() {
@@ -856,6 +860,40 @@ export class Session {
     this.userInfoCards.delete(privateTarget);
     this.sendPrivateCard(privateTarget);
     this.updateMessagingCard();
+  }
+
+  // Player voting actions
+  protected playerVoteNone(userId: string) {
+    if (!this.state.voting.value) return;
+
+    // 只有玩家可以投票
+    if (!this.internalHasPlayer(userId)) return;
+
+    // TODO: 实现不投票逻辑
+    console.log(`Player ${userId} chose not to vote`);
+  }
+
+  protected playerVoteOne(userId: string) {
+    if (!this.state.voting.value) return;
+
+    // 只有玩家可以投票
+    if (!this.internalHasPlayer(userId)) return;
+
+    // TODO: 实现投票逻辑
+    console.log(`Player ${userId} voted once`);
+  }
+
+  protected playerVoteTwo(userId: string) {
+    if (!this.state.voting.value) return;
+
+    // 只有玩家可以投票
+    if (!this.internalHasPlayer(userId)) return;
+
+    // 只有当 listArg 为 1 时才能投两票
+    if (this.state.listArg.value !== 1) return;
+
+    // TODO: 实现投两票逻辑
+    console.log(`Player ${userId} voted twice`);
   }
 
   /**
