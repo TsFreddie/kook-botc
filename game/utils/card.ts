@@ -65,9 +65,6 @@ export const $card = <T extends object>(card: Card<T>): CardState<T> => {
 export abstract class Card<T extends object> {
   private queue = new LatestQueue();
 
-  /** 当前的状态 */
-  private state: T;
-
   private id: string = '';
   private mounted: boolean = false;
 
@@ -78,12 +75,21 @@ export abstract class Card<T extends object> {
   /** 在更新消息时是否静默报错 */
   protected suppressError = false;
 
+  /** 上次处理时间戳 */
+  private lastProcessTime = 0;
+
   abstract render(state: T): {
     content: string;
     template_id?: string;
   };
 
-  constructor(state: T) {
+  constructor(
+    /** 卡片状态 */
+    private state: T,
+
+    /** 最小更新间隔，单位毫秒 */
+    private minInterval = 250,
+  ) {
     this.state = state;
     for (const [key, value] of Object.entries(this.state)) {
       this.registerStateListener(key, value);
@@ -140,7 +146,18 @@ export abstract class Card<T extends object> {
           template_id: rendered.template_id,
         })
       ).msg_id;
+      this.lastProcessTime = Date.now();
     });
+  }
+
+  /** 确保最小处理间隔 */
+  private async ensureMinInterval() {
+    const now = Date.now();
+    const elapsed = now - this.lastProcessTime;
+    if (elapsed < this.minInterval) {
+      const delay = this.minInterval - elapsed;
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
   }
 
   /** 更新卡片状态 */
@@ -152,6 +169,7 @@ export abstract class Card<T extends object> {
     }
 
     this.queue.push(async () => {
+      await this.ensureMinInterval();
       const rendered = this.render(this.state);
       try {
         await BOT.api.messageUpdate({
@@ -164,6 +182,7 @@ export abstract class Card<T extends object> {
           throw err;
         }
       }
+      this.lastProcessTime = Date.now();
     });
   }
 
