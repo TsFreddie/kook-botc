@@ -248,6 +248,7 @@ class CardRenderer extends Card<Props> {
       header: `**玩家列表** (font)(城镇广场人数：${state.townsquareCount.value} / ${state.list.value.length})(font)[secondary]`,
       status,
       action,
+      forceButton: true,
       prefix: `[sp]${value}`,
       groups: groups.length > 0 ? groups : undefined,
       countdown,

@@ -17,6 +17,9 @@ export interface PlayersTemplateParams {
   /** 操作 */
   action?: { text: string; theme: ButtonTheme };
 
+  /** 强制在玩家列表中显示按钮 */
+  forceButton?: boolean;
+
   /** 倒计时 */
   countdown?: {
     start: number;

@@ -81,7 +81,7 @@
               "click": "return-val",
               "value": "{{ data.prefix }}|{{ player.id }}"
             }
-          {% else %}
+          {% elseif data.forceButton %}
             ,"mode": "right",
             "accessory": {
               "type": "button",
@@ -104,7 +104,7 @@
           "click": "return-val",
           "value": "{{ data.prefix }}|{{ player.id }}"
         }
-        {% else %}
+        {% elseif data.forceButton %}
         ,"mode": "right",
         "accessory": {
           "type": "button",
