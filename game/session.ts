@@ -175,18 +175,6 @@ export interface PlayerState {
   };
 }
 
-const SEP = '　';
-const statusToColumns = (status: PlayerStatus) => {
-  switch (status) {
-    case PlayerStatus.ALIVE:
-      return `　${SEP}　`;
-    case PlayerStatus.DEAD:
-      return `(font)亡(font)[danger]${SEP}(font)票(font)[success]`;
-    case PlayerStatus.DEAD_VOTED:
-      return `(font)亡(font)[danger]${SEP}　`;
-  }
-};
-
 /**
  * 游戏会话
  */
@@ -491,7 +479,31 @@ export class Session {
     // 玩家顺序：按槽位游戏玩家 -> 说书人 -> 旁观玩家
     const joinedPlayers = new Set(this.register.getJoinedPlayers());
 
-    const voteToEmoji = (vote: { count: number; status: PlayerVoteStatus }) => {
+    const SEP = '　';
+    const slot = (userId: string, text: string, color: string) => {
+      return `(font)${text}(font)[${this.townsquareUsers.has(userId) ? color : 'tips'}]`;
+    };
+    const status = (player: PlayerState) => {
+      switch (player.status) {
+        case PlayerStatus.ALIVE:
+          return `　${SEP}　`;
+        case PlayerStatus.DEAD:
+          if (
+            this.vote.isNomination() &&
+            player.vote.status === PlayerVoteStatus.COUNTED &&
+            player.vote.count > 0
+          ) {
+            // 提示该玩家投票权会被使用
+            return `(font)亡(font)[danger]${SEP}(font)票(font)[tips]`;
+          } else {
+            return `(font)亡(font)[danger]${SEP}(font)票(font)[success]`;
+          }
+        case PlayerStatus.DEAD_VOTED:
+          return `(font)亡(font)[danger]${SEP}　`;
+      }
+    };
+    const vote = (vote: { count: number; status: PlayerVoteStatus }) => {
+      if (!this.state.voting.value) return null;
       if (vote.status === PlayerVoteStatus.COUNTING) {
         return `➡️ ${vote.count === 0 ? '⬛' : vote.count === 1 ? '✅' : '2️⃣'}`;
       } else if (vote.status === PlayerVoteStatus.COUNTED) {
@@ -502,20 +514,31 @@ export class Session {
     };
 
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
-      const vote = this.state.voting.value ? `${SEP}${voteToEmoji(p.vote)}` : '';
+      const infoColumns = [
+        slot(p.id, CIRCLED_NUMBERS[index + 1] || '⓪', 'success'),
+        status(p),
+        vote(p.vote),
+        `(met)${p.id}(met)`,
+      ];
+
       return {
         type: 'player',
         id: p.id,
         joined: joinedPlayers.has(p.id),
-        info: `(font)${CIRCLED_NUMBERS[index + 1] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'success' : 'tips'}]${SEP}${statusToColumns(p.status)}${vote}${SEP}(met)${p.id}(met)`,
+        info: infoColumns.filter((item) => item !== null).join(SEP),
       };
     });
+
+    const storytellerInfoColumns = [
+      slot(this.storytellerId, '说书人', 'warning'),
+      `(met)${this.storytellerId}(met)`,
+    ];
 
     players.push({
       type: 'storyteller',
       id: this.storytellerId,
       joined: joinedPlayers.has(this.storytellerId),
-      info: `(font)说书人(font)[${this.townsquareUsers.has(this.storytellerId) ? 'warning' : 'tips'}]${SEP}(met)${this.storytellerId}(met)`,
+      info: storytellerInfoColumns.join(SEP),
     });
 
     // 添加旁观玩家（有会话权限但不在游戏中的用户）
@@ -529,11 +552,17 @@ export class Session {
 
     // 按用户ID排序旁观者
     spectators.sort().forEach((userId) => {
+      // Build spectator info using array for consistency
+      const spectatorInfoColumns = [
+        slot(this.storytellerId, '旁观者', 'purple'),
+        `(met)${userId}(met)`,
+      ];
+
       players.push({
         type: 'spectator',
         id: userId,
         joined: true,
-        info: `(font)旁观者(font)[${this.townsquareUsers.has(userId) ? 'success' : 'tips'}]${SEP}(met)${userId}(met)`,
+        info: spectatorInfoColumns.join(SEP),
       });
     });
 

@@ -61,7 +61,7 @@ export class VoteManager {
    * 是否为提名投票
    */
   isNomination() {
-    return this._startIndex !== -1;
+    return this.state.voting.value && this._startIndex !== -1;
   }
 
   /** 进入提名投票 */
@@ -274,9 +274,23 @@ export class VoteManager {
   exit() {
     this.stop();
 
+    if (this.isNomination()) {
+      for (const p of this.players) {
+        if (
+          p.status === PlayerStatus.DEAD &&
+          p.vote.count > 0 &&
+          p.vote.status === PlayerVoteStatus.COUNTED
+        ) {
+          // 自动撤除玩家投票权
+          p.status = PlayerStatus.DEAD_VOTED;
+        }
+      }
+    }
+
     this.state.voting.set(false);
     this.state.votingStart.set(0);
     this.state.votingEnd.set(0);
+
     this.updatePlayerList();
   }
 }
