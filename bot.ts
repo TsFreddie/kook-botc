@@ -197,10 +197,7 @@ const initialize = async () => {
 
   // 检查小屋分组是否有禁止查看权限，若没有则禁止
   const cottageCategoryDeny =
-    Permission.VIEW_CHANNELS |
-    Permission.CREATE_INVITE |
-    Permission.CONNECT_VOICE |
-    Permission.PASSIVE_CONNECT_VOICE;
+    Permission.VIEW_CHANNELS | Permission.CREATE_INVITE | Permission.CONNECT_VOICE;
   if (
     !cottageCategory.permission_overwrites ||
     !cottageCategory.permission_overwrites.some(
