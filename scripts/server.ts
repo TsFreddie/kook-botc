@@ -107,6 +107,12 @@ const htmlHandler = createStaticFileHandler('/', '.', {
   enableETag: true,
 });
 
+const faviconHandler = createStaticFileHandler('/favicons/', './favicons', {
+  debug: false,
+  maxAge: 604800, // 7 days for favicons
+  enableETag: true,
+});
+
 async function handleStoreScript(request: Request): Promise<Response> {
   try {
     const jsonData = await request.text();
@@ -226,6 +232,23 @@ const server = Bun.serve({
 
     // Static file serving for JavaScript files with caching
     '/js/*': jsHandler,
+
+    // Favicon serving with long cache
+    '/favicons/*': faviconHandler,
+
+    // Root favicon.ico redirect
+    '/favicon.ico': async (req) => {
+      const url = new URL(req.url);
+      url.pathname = '/favicons/favicon.ico';
+
+      const modifiedRequest = new Request(url.toString(), {
+        method: req.method,
+        headers: req.headers,
+        body: req.body,
+      });
+
+      return faviconHandler(modifiedRequest);
+    },
 
     // Short URL script viewer - retrieve from database
     '/s/:metadataId/:rolesId': async (req) => {
