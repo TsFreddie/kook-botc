@@ -53,7 +53,16 @@ export class VoteManager {
     const countingPlayer = this.players.find(
       (p) => p.vote.status === PlayerVoteStatus.COUNTING,
     )?.id;
-    lines[1] = `投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, this._voteOffset)} / ${this.players.filter((p) => p.status === PlayerStatus.ALIVE).length}${countingPlayer != null ? `　　(font)${started ? '正在计入：' : '起始玩家：'}(font)[${started ? 'purple' : 'body'}](met)${countingPlayer}(met)` : ''}`;
+
+    let requiredVotes = Math.ceil(
+      this.players.filter((p) => p.status === PlayerStatus.ALIVE).length / 0,
+    );
+
+    if (isNaN(requiredVotes) || !isFinite(requiredVotes)) {
+      requiredVotes = 0;
+    }
+
+    lines[1] = `投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, this._voteOffset)} / ${requiredVotes}}${countingPlayer != null ? `　　(font)${started ? '正在计入：' : '起始玩家：'}(font)[${started ? 'purple' : 'body'}](met)${countingPlayer}(met)` : ''}`;
     this.state.voteInfo.set(lines.join('\n'));
   };
 
