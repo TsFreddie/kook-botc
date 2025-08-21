@@ -36,6 +36,8 @@ report.[0-9]_.[0-9]_.[0-9]_.[0-9]_.json
 # Persistents
 assets.db
 assets.db-*
+scripts/scripts.db
+scripts/scripts.db-*
 
 # Tools
 tools

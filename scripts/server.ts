@@ -1,4 +1,8 @@
-import { generateScriptHTML } from './html_generator';
+import { generateScriptHTML } from './generator';
+import { ScriptDatabase } from './database';
+import { validateAndSeparateScript, type ScriptInput } from './validator';
+import { createStaticFileHandler } from './fileServer';
+import { stat } from 'fs/promises';
 
 function base64UrlDecode(str: string): string {
   // Add padding if needed
@@ -31,90 +35,287 @@ function decodeAndDecompress(base64: string): string {
   return new TextDecoder().decode(decompressed);
 }
 
-// Remove the embedded HTML - now served as static files
+// Initialize database
+const db = new ScriptDatabase();
+
+// Cache for generator.ts modification time
+let generatorModTime: Date | null = null;
+
+/**
+ * Get the modification time of generator.ts for Last-Modified headers
+ */
+async function getGeneratorModTime(): Promise<Date> {
+  if (!generatorModTime) {
+    try {
+      const stats = await stat('./generator.ts');
+      generatorModTime = stats.mtime;
+    } catch (error) {
+      // Fallback to current time if file doesn't exist
+      generatorModTime = new Date();
+    }
+  }
+  return generatorModTime;
+}
+
+/**
+ * Check if request should return 304 Not Modified based on generator.ts modification time
+ */
+async function checkNotModified(request: Request): Promise<boolean> {
+  const ifModifiedSince = request.headers.get('If-Modified-Since');
+  if (!ifModifiedSince) {
+    return false;
+  }
+
+  try {
+    const ifModifiedSinceDate = new Date(ifModifiedSince);
+    const generatorMTime = await getGeneratorModTime();
+    return generatorMTime <= ifModifiedSinceDate;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create headers for script viewer responses
+ */
+async function createScriptViewerHeaders(): Promise<Headers> {
+  const headers = new Headers();
+  headers.set('Content-Type', 'text/html');
+  headers.set('Cache-Control', 'public, max-age=300'); // 5 minutes
+
+  const generatorMTime = await getGeneratorModTime();
+  headers.set('Last-Modified', generatorMTime.toUTCString());
+
+  return headers;
+}
+
+// Create file server handlers
+const iconsHandler = createStaticFileHandler('/icons/', './icons', {
+  debug: false,
+  maxAge: 86400,
+  enableETag: true,
+});
+
+const jsHandler = createStaticFileHandler('/js/', './js', {
+  debug: false,
+  maxAge: 3600,
+  enableETag: true,
+});
+
+const htmlHandler = createStaticFileHandler('/', '.', {
+  debug: false,
+  enableETag: true,
+});
+
+async function handleStoreScript(request: Request): Promise<Response> {
+  try {
+    const jsonData = await request.text();
+
+    // Parse and validate the script data
+    const scriptData = JSON.parse(jsonData) as ScriptInput;
+    const validated = validateAndSeparateScript(scriptData);
+
+    // Store in database and get IDs
+    const { metadataId, rolesId } = await db.storeScript(validated.metadata, validated.roles);
+    const shortUrl = `${new URL(request.url).origin}/s/${metadataId}/${rolesId}`;
+
+    return new Response(JSON.stringify({ url: shortUrl }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
+  } catch (error: any) {
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 400,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+function generateErrorHTML(title: string, message: string): string {
+  return `
+    <html lang="zh-CN">
+      <head>
+        <meta charset="UTF-8">
+        <title>${title} - 《染・钟楼谜团》剧本查看器</title>
+        <style>
+          body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
+            max-width: 600px;
+            margin: 50px auto;
+            padding: 20px;
+            text-align: center;
+          }
+          h1 { color: #f44336; }
+          a { color: #007bff; text-decoration: none; }
+          a:hover { text-decoration: underline; }
+
+          @media (prefers-color-scheme: dark) {
+            body {
+              background-color: #1a1a1a;
+              color: #e0e0e0;
+            }
+            h1 { color: #ff6b6b; }
+            a { color: #4da6ff; }
+          }
+
+          body.revert {
+            background-color: white;
+            color: black;
+          }
+          body.revert h1 { color: #f44336; }
+          body.revert a { color: #007bff; }
+        </style>
+      </head>
+      <body>
+        <h1>${title}</h1>
+        <p>${message}</p>
+        <a href="/">← 返回上传页面</a>
+
+        <script>
+          // Initialize theme based on localStorage or system preference
+          document.addEventListener('DOMContentLoaded', function() {
+            const body = document.body;
+            const savedMode = localStorage.getItem('themeMode');
+            const systemDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+
+            // If user has manually set light mode, or system is light and no preference saved
+            if (savedMode === 'light' || (savedMode === null && !systemDarkMode)) {
+              if (systemDarkMode) {
+                body.classList.add('revert');
+              }
+            }
+            // If user has manually set dark mode
+            else if (savedMode === 'dark') {
+              if (!systemDarkMode) {
+                // System is light but user wants dark - we can't force dark mode
+                // Just remove revert class to use system default
+                body.classList.remove('revert');
+              }
+            }
+          });
+        </script>
+      </body>
+    </html>
+  `;
+}
 
 const server = Bun.serve({
   port: 8080,
-  fetch(request) {
-    const url = new URL(request.url);
+  routes: {
+    // API endpoint for storing scripts
+    '/api/store': {
+      POST: handleStoreScript,
+    },
 
-    // Home page - serve index.html
-    if (url.pathname === '/') {
-      const indexFile = Bun.file('./index.html');
-      return new Response(indexFile);
-    }
+    // Home page with caching
+    '/': async (req) => {
+      // Create a modified request for index.html
+      const url = new URL(req.url);
+      url.pathname = '/index.html';
 
-    // Serve icon files using Bun.file()
-    if (url.pathname.startsWith('/icons/')) {
-      const iconName = url.pathname.slice(7); // Remove '/icons/'
-      const iconFile = Bun.file(`./icons/${iconName}`);
+      const modifiedRequest = new Request(url.toString(), {
+        method: req.method,
+        headers: req.headers,
+        body: req.body,
+      });
 
-      // Return the file directly - Bun handles the streaming automatically
-      return new Response(iconFile);
-    }
+      return htmlHandler(modifiedRequest);
+    },
 
-    if (url.pathname.startsWith('/js/')) {
-      const jsFile = Bun.file(`./js${url.pathname.slice(3)}`);
-      return new Response(jsFile);
-    }
+    // Static file serving for icons with caching
+    '/icons/*': iconsHandler,
 
-    // Compressed script viewer - decode gzipped base64 and generate HTML
-    if (url.pathname.startsWith('/z/')) {
-      const base64Data = url.pathname.slice(3); // Remove '/z/'
+    // Static file serving for JavaScript files with caching
+    '/js/*': jsHandler,
 
-      if (base64Data) {
-        try {
-          // Decode and decompress gzipped base64 string
-          const jsonString = decodeAndDecompress(base64Data);
-          const scriptData = JSON.parse(jsonString);
+    // Short URL script viewer - retrieve from database
+    '/s/:metadataId/:rolesId': async (req) => {
+      const { metadataId, rolesId } = req.params;
 
-          // Generate HTML using the modified html_generator
-          const html = generateScriptHTML(scriptData);
+      try {
+        // Check if client has current version
+        if (await checkNotModified(req)) {
+          return new Response(null, { status: 304 });
+        }
 
-          return new Response(html, {
+        const scriptRecord = db.getScript(metadataId, rolesId);
+
+        if (!scriptRecord) {
+          return new Response(generateErrorHTML('未找到', '指定的剧本不存在或已被删除'), {
+            status: 404,
             headers: { 'Content-Type': 'text/html' },
           });
-        } catch (error: any) {
-          return new Response(
-            `
-            <html lang="zh-CN">
-              <head>
-                <meta charset="UTF-8">
-                <title>错误 - 剧本查看器</title>
-                <style>
-                  body {
-                    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-                    max-width: 600px;
-                    margin: 50px auto;
-                    padding: 20px;
-                    text-align: center;
-                  }
-                  h1 { color: #f44336; }
-                  a { color: #007bff; text-decoration: none; }
-                  a:hover { text-decoration: underline; }
-                </style>
-              </head>
-              <body>
-                <h1>错误</h1>
-                <p>无法解码或处理压缩剧本数据：${error.message}</p>
-                <a href="/">← 返回上传页面</a>
-              </body>
-            </html>
-          `,
-            {
-              status: 400,
-              headers: { 'Content-Type': 'text/html' },
-            },
-          );
         }
+
+        // Combine metadata and roles back into script format
+        const scriptData = { ...scriptRecord.metadata, ...scriptRecord.roles };
+        const html = generateScriptHTML(scriptData);
+
+        const headers = await createScriptViewerHeaders();
+        return new Response(html, { headers });
+      } catch (error: any) {
+        return new Response(generateErrorHTML('错误', `处理剧本数据时出错：${error.message}`), {
+          status: 500,
+          headers: { 'Content-Type': 'text/html' },
+        });
       }
-    }
+    },
 
-    // Script viewer - decode base64 and generate HTML (legacy support)
-    const base64Data = url.pathname.slice(1); // Remove leading slash
+    // Compressed script viewer - decode gzipped base64 and generate HTML
+    '/z/*': async (req) => {
+      const url = new URL(req.url);
+      const base64Data = url.pathname.slice(3); // Remove '/z/'
 
-    if (base64Data) {
+      if (!base64Data) {
+        return new Response(generateErrorHTML('错误', '缺少压缩数据'), {
+          status: 400,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
       try {
+        // Check if client has current version
+        if (await checkNotModified(req)) {
+          return new Response(null, { status: 304 });
+        }
+
+        // Decode and decompress gzipped base64 string
+        const jsonString = decodeAndDecompress(base64Data);
+        const scriptData = JSON.parse(jsonString);
+
+        // Generate HTML using the modified html_generator
+        const html = generateScriptHTML(scriptData);
+
+        const headers = await createScriptViewerHeaders();
+        return new Response(html, { headers });
+      } catch (error: any) {
+        return new Response(
+          generateErrorHTML('错误', `无法解码或处理压缩剧本数据：${error.message}`),
+          {
+            status: 400,
+            headers: { 'Content-Type': 'text/html' },
+          },
+        );
+      }
+    },
+
+    // Legacy base64 script viewer - decode base64 and generate HTML
+    '/b/*': async (req) => {
+      const url = new URL(req.url);
+      const base64Data = url.pathname.slice(3); // Remove '/b/'
+
+      if (!base64Data) {
+        return new Response(generateErrorHTML('错误', '缺少base64数据'), {
+          status: 400,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+
+      try {
+        // Check if client has current version
+        if (await checkNotModified(req)) {
+          return new Response(null, { status: 304 });
+        }
+
         // Decode base64 URL-safe string
         const jsonString = base64UrlDecode(base64Data);
         const scriptData = JSON.parse(jsonString);
@@ -122,48 +323,16 @@ const server = Bun.serve({
         // Generate HTML using the modified html_generator
         const html = generateScriptHTML(scriptData);
 
-        return new Response(html, {
+        const headers = await createScriptViewerHeaders();
+        return new Response(html, { headers });
+      } catch (error: any) {
+        return new Response(generateErrorHTML('错误', `无法解码或处理剧本数据：${error.message}`), {
+          status: 400,
           headers: { 'Content-Type': 'text/html' },
         });
-      } catch (error: any) {
-        return new Response(
-          `
-          <html lang="zh-CN">
-            <head>
-              <meta charset="UTF-8">
-              <title>错误 - 剧本查看器</title>
-              <style>
-                body {
-                  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif;
-                  max-width: 600px;
-                  margin: 50px auto;
-                  padding: 20px;
-                  text-align: center;
-                }
-                h1 { color: #f44336; }
-                a { color: #007bff; text-decoration: none; }
-                a:hover { text-decoration: underline; }
-              </style>
-            </head>
-            <body>
-              <h1>错误</h1>
-              <p>无法解码或处理剧本数据：${error.message}</p>
-              <a href="/">← 返回上传页面</a>
-            </body>
-          </html>
-        `,
-          {
-            status: 400,
-            headers: { 'Content-Type': 'text/html' },
-          },
-        );
       }
-    }
-
-    return new Response('Not Found', { status: 404 });
+    },
   },
 });
 
-console.log(`🚀 剧本查看器运行在 http://localhost:${server.port}`);
-console.log('📝 上传剧本：http://localhost:8080');
-console.log('👀 查看剧本：http://localhost:8080/<base64_encoded_json>');
+console.log(`Server Running: http://localhost:${server.port}`);

@@ -1,25 +1,13 @@
 import data from './data.json';
+import { validateRoles, type ScriptInput } from './validator';
 
 type Role = (typeof data)[number];
-
-interface ScriptInput {
-  name: string;
-  level: number;
-  author: string;
-  roles: { id: string }[];
-  min_player: number;
-  max_player: number;
-}
 
 const TEAM_NAMES = {
   townsfolk: '•──⋅☾　镇　民　☽⋅──•',
   outsider: '•──⋅☾　外来者　☽⋅──•',
   minion: '•──⋅☾　爪　牙　☽⋅──•',
   demon: '•──⋅☾　恶　魔　☽⋅──•',
-};
-
-const normalizeId = (id: string) => {
-  return id.toLowerCase().replace(/[ -_]/g, '');
 };
 
 /**
@@ -70,34 +58,14 @@ function escapeHtml(text: string): string {
 
 export function generateScriptHTML(scriptData: ScriptInput): string {
   try {
-    // Create a map for faster lookup with normalized IDs
-    const rolesMap = new Map<string, Role>();
-    for (const role of data) {
-      rolesMap.set(normalizeId(role.id), role);
-    }
+    // Validate roles using the shared validator
+    const rolesData = validateRoles({ roles: scriptData.roles });
 
-    // Filter roles based on input IDs and check for missing roles
-    const selectedRoles: Role[] = [];
-    const missingRoles: string[] = [];
-
-    for (const { id } of scriptData.roles) {
-      const normalizedInputId = normalizeId(id);
-      const role = rolesMap.get(normalizedInputId);
-
-      if (role) {
-        selectedRoles.push(role);
-      } else {
-        missingRoles.push(id);
-      }
-    }
-
-    // If there are missing roles, throw error
-    if (missingRoles.length > 0) {
-      throw new Error(`没有找到这些角色：${missingRoles.join(', ')}`);
-    }
-
-    // Use selectedRoles instead of rolesData
-    const rolesData = selectedRoles;
+    // Ensure name is defined
+    const normalizedScriptData = {
+      ...scriptData,
+      name: scriptData.name || '未命名剧本',
+    };
 
     // Filter and categorize roles (exclude travelers and other types)
     const categorizedRoles: Record<string, Role[]> = {
@@ -114,13 +82,16 @@ export function generateScriptHTML(scriptData: ScriptInput): string {
     }
 
     // Generate HTML
-    return generateHTML(scriptData, categorizedRoles);
+    return generateHTML(normalizedScriptData, categorizedRoles);
   } catch (error) {
     throw new Error(`页面生成错误：${error}`);
   }
 }
 
-function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, Role[]>): string {
+function generateHTML(
+  scriptData: ScriptInput & { name: string },
+  categorizedRoles: Record<string, Role[]>,
+): string {
   // Count total roles to determine if we need grid layout
   const totalRoles = Object.values(categorizedRoles).reduce((sum, roles) => sum + roles.length, 0);
   const useGrid = totalRoles > 12;
@@ -129,7 +100,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
-    <title>${escapeHtml(scriptData.name)} - Blood on the Clocktower Script</title>
+    <title>${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本</title>
     <style>
         hr {
           opacity: 0.5;
@@ -149,7 +120,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
           margin-bottom: 0.5em;
         }
         .blue {
-          color: #0085bd;
+          color: #0696d3;
         }
         .red {
           color: #6d090c;
@@ -213,6 +184,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             padding: 8px 12px;
             cursor: pointer;
             font-size: 0.9em;
+            width: 50px;
         }
         .theme-toggle::before {
             content: "🌙";
@@ -254,7 +226,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             color: black;
         }
         body.revert .blue {
-            color: #0085bd;
+            color: #0696d3;
         }
         body.revert .red {
             color: #6d090c;
@@ -281,11 +253,11 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             color: #666;
         }
         .footer a {
-            color: #0085bd;
+            color: #0696d3;
             text-decoration: none;
         }
         .footer a:visited {
-            color: #0085bd;
+            color: #0696d3;
         }
         .footer a:hover {
             text-decoration: underline;
@@ -307,8 +279,8 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
     ${scriptData.author ? `<span> by ${escapeHtml(scriptData.author)}</span>` : ''}
     ${generateSubInfo(scriptData)}
     <div class="header-buttons">
-        <button class="download-btn" onclick="downloadPage()"></button>
-        <button class="theme-toggle" onclick="toggleTheme()"></button>
+        <button class="download-btn" onclick="downloadPage()" title="下载页面"></button>
+        <button class="theme-toggle" onclick="toggleTheme()" title="切换主题"></button>
     </div>
     <hr>`;
 
@@ -462,6 +434,21 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             }
         }
 
+        // Add transition styles after initial load to prevent flash
+        function addTransitions() {
+            const style = document.createElement('style');
+            style.textContent = \`
+                * {
+                    transition:
+                        background-color 0.3s ease,
+                        color 0.3s ease,
+                        border-color 0.3s ease,
+                        box-shadow 0.3s ease;
+                }
+            \`;
+            document.head.appendChild(style);
+        }
+
         // Initialize theme based on localStorage or system preference
         document.addEventListener('DOMContentLoaded', function() {
             const body = document.body;
@@ -483,6 +470,9 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
                 }
             }
 
+            // Add transitions after theme is set to prevent flash
+            setTimeout(addTransitions, 50);
+
             // Load icons after DOM is ready
             loadIcons();
         });
@@ -492,5 +482,3 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
 
   return html;
 }
-
-// Export the main function for use in the server
