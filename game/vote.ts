@@ -82,12 +82,13 @@ export class VoteManager {
     this.state.voteInfo.set(
       `(met)${this.from}(met) 发起提名，投票(font)处决(font)[danger] (met)${this.to}(met)`,
     );
-    this.updateVotingLine();
     // 开启投票状态
     this.state.voting.set(true);
     // 禁用倒计时
     this.state.votingStart.set(0);
     this.state.votingEnd.set(0);
+
+    this.updateVotingLine();
     this.updatePlayerList();
   }
 
