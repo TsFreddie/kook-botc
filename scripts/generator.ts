@@ -172,7 +172,6 @@ function generateHTML(
           margin: 0.1em;
         }
         body {
-          font-size: 10pt;
           padding: 0.5em 2em;
           max-width: 1024px;
           margin: auto;
@@ -228,7 +227,6 @@ function generateHTML(
         /* Mobile optimizations */
         @media (max-width: 640px) {
             body {
-                font-size: 11pt;
                 padding: 0.75em;
             }
             h1 {
@@ -248,7 +246,6 @@ function generateHTML(
 
         @media (max-width: 480px) {
             body {
-                font-size: 11pt;
                 padding: 0.5em;
             }
             h1 {
