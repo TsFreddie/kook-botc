@@ -71,7 +71,7 @@ class CardRenderer extends Card<Props> {
           { text: '上麦', theme: 'info', value: '[st]ListSpotlight' },
           // 小屋按钮只在自由活动阶段显示
           state.phase.value === Phase.ROAMING || state.phase.value === Phase.NIGHT
-            ? { text: '小屋', theme: 'info', value: '[st]ListCottage' }
+            ? { text: '小屋', theme: 'success', value: '[st]ListCottage' }
             : { text: '　', theme: 'secondary' },
         ]);
         theme = 'secondary';

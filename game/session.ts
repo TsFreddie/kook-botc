@@ -574,17 +574,15 @@ export class Session {
   protected storytellerGameStart() {
     if (!this.phase(Phase.PREPARING, Phase.FINISH_GOOD, Phase.FINISH_BAD)) return;
 
-    // 如果当前是小屋模式，切换回状态模式
-    if (this.state.listMode.value === ListMode.COTTAGE) {
-      this.storytellerListStatus();
-    }
-
     // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
     this.updateMuteState();
+
+    // 自动切换到小屋模式
+    this.storytellerListCottage();
   }
 
   protected storytellerGameDay() {
@@ -617,16 +615,14 @@ export class Session {
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
-    // 如果当前是小屋模式，切换回状态模式
-    if (this.state.listMode.value === ListMode.COTTAGE) {
-      this.storytellerListStatus();
-    }
-
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
     this.updateMuteState();
+
+    // 自动切换到小屋模式
+    this.storytellerListCottage();
   }
 
   protected storytellerGameRestart(winner?: 'good' | 'bad') {

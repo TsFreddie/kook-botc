@@ -339,7 +339,19 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'user_id',
             value: userId,
-            allow: Permission.VIEW_CHANNELS,
+            allow:
+              Permission.VIEW_CHANNELS |
+              Permission.CONNECT_VOICE |
+              Permission.PASSIVE_CONNECT_VOICE,
+          }),
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'user_id',
+            value: this.storytellerId,
+            allow:
+              Permission.VIEW_CHANNELS |
+              Permission.CONNECT_VOICE |
+              Permission.PASSIVE_CONNECT_VOICE,
           }),
         );
       });
@@ -373,7 +385,19 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'user_id',
             value: userId,
-            deny: Permission.VIEW_CHANNELS,
+            deny:
+              Permission.VIEW_CHANNELS |
+              Permission.CONNECT_VOICE |
+              Permission.PASSIVE_CONNECT_VOICE,
+          }),
+          BOT.api.channelRoleUpdate({
+            channel_id: channelId,
+            type: 'user_id',
+            value: this.storytellerId,
+            deny:
+              Permission.VIEW_CHANNELS |
+              Permission.CONNECT_VOICE |
+              Permission.PASSIVE_CONNECT_VOICE,
           }),
         );
       });
