@@ -1,12 +1,29 @@
 import data from './data.json';
 
-type Role = (typeof data)[number];
+type BaseRole = (typeof data)[number];
+
+// Extended role type that supports custom characters
+export interface Role extends BaseRole {
+  image?: string;
+}
+
+// Custom character definition (for roles that don't exist in data.json)
+export interface CustomRole {
+  id: string;
+  name: string;
+  team: 'townsfolk' | 'outsider' | 'minion' | 'demon' | 'traveler' | 'fabled';
+  ability: string;
+  image?: string;
+}
+
+// Role input can be just an ID or a custom role
+export type RoleInput = { id: string } | CustomRole;
 
 export interface ScriptInput {
   name?: string;
   level?: number;
   author?: string;
-  roles: { id: string }[];
+  roles: RoleInput[];
   min_player?: number;
   max_player?: number;
 }
@@ -20,7 +37,7 @@ export interface ScriptMetadata {
 }
 
 export interface ScriptRoles {
-  roles: { id: string }[];
+  roles: RoleInput[];
 }
 
 export interface ValidatedScript {
@@ -32,6 +49,11 @@ export interface ValidatedScript {
 const normalizeId = (id: string) => {
   return id.toLowerCase().replace(/[ -_]/g, '');
 };
+
+// Type guard functions
+function isCustomRole(role: RoleInput): role is CustomRole {
+  return 'name' in role && 'team' in role && 'ability' in role;
+}
 
 /**
  * Validate input types for script data
@@ -89,6 +111,25 @@ function validateInputTypes(scriptData: any): void {
     if (typeof role.id !== 'string') {
       throw new Error(`角色[${i}]的id必须是字符串类型`);
     }
+
+    // Validate custom character fields if this is a custom role
+    if (isCustomRole(role)) {
+      if (typeof role.name !== 'string') {
+        throw new Error(`自定义角色[${i}]的name必须是字符串类型`);
+      }
+      if (typeof role.team !== 'string') {
+        throw new Error(`自定义角色[${i}]的team必须是字符串类型`);
+      }
+      if (!['townsfolk', 'outsider', 'minion', 'demon', 'traveler', 'traveller', 'fabled'].includes(role.team)) {
+        throw new Error(`自定义角色[${i}]的team必须是有效的阵营类型`);
+      }
+      if (typeof role.ability !== 'string') {
+        throw new Error(`自定义角色[${i}]的ability必须是字符串类型`);
+      }
+      if (role.image !== undefined && typeof role.image !== 'string') {
+        throw new Error(`自定义角色[${i}]的image必须是字符串类型`);
+      }
+    }
   }
 }
 
@@ -105,23 +146,38 @@ export function validateAndSeparateScript(scriptData: ScriptInput): ValidatedScr
   }
 
   // Create a map for faster lookup with normalized IDs
-  const rolesMap = new Map<string, Role>();
+  const rolesMap = new Map<string, BaseRole>();
   for (const role of data) {
     rolesMap.set(normalizeId(role.id), role);
   }
 
-  // Validate roles and check for missing ones
+  // Validate roles and resolve them
   const resolvedRoles: Role[] = [];
   const missingRoles: string[] = [];
 
-  for (const { id } of scriptData.roles) {
-    const normalizedInputId = normalizeId(id);
-    const role = rolesMap.get(normalizedInputId);
-
-    if (role) {
-      resolvedRoles.push(role);
+  for (const roleInput of scriptData.roles) {
+    if (isCustomRole(roleInput)) {
+      // Handle custom role - convert to Role format
+      const customRole: Role = {
+        id: roleInput.id,
+        name: roleInput.name,
+        team: roleInput.team,
+        ability: roleInput.ability,
+        image: roleInput.image || 'none', // Store 'none' if no image provided
+      };
+      resolvedRoles.push(customRole);
     } else {
-      missingRoles.push(id);
+      // Handle existing role by ID
+      const normalizedInputId = normalizeId(roleInput.id);
+      const role = rolesMap.get(normalizedInputId);
+
+      if (role) {
+        // Convert BaseRole to Role (add image field if needed)
+        const extendedRole: Role = { ...role };
+        resolvedRoles.push(extendedRole);
+      } else {
+        missingRoles.push(roleInput.id);
+      }
     }
   }
 
@@ -203,23 +259,38 @@ export function validateRoles(roles: ScriptRoles): Role[] {
   }
 
   // Create a map for faster lookup with normalized IDs
-  const rolesMap = new Map<string, Role>();
+  const rolesMap = new Map<string, BaseRole>();
   for (const role of data) {
     rolesMap.set(normalizeId(role.id), role);
   }
 
-  // Validate roles and check for missing ones
+  // Validate roles and resolve them
   const resolvedRoles: Role[] = [];
   const missingRoles: string[] = [];
 
-  for (const { id } of roles.roles) {
-    const normalizedInputId = normalizeId(id);
-    const role = rolesMap.get(normalizedInputId);
-
-    if (role) {
-      resolvedRoles.push(role);
+  for (const roleInput of roles.roles) {
+    if (isCustomRole(roleInput)) {
+      // Handle custom role - convert to Role format
+      const customRole: Role = {
+        id: roleInput.id,
+        name: roleInput.name,
+        team: roleInput.team,
+        ability: roleInput.ability,
+        image: roleInput.image || 'none', // Store 'none' if no image provided
+      };
+      resolvedRoles.push(customRole);
     } else {
-      missingRoles.push(id);
+      // Handle existing role by ID
+      const normalizedInputId = normalizeId(roleInput.id);
+      const role = rolesMap.get(normalizedInputId);
+
+      if (role) {
+        // Convert BaseRole to Role (add image field if needed)
+        const extendedRole: Role = { ...role };
+        resolvedRoles.push(extendedRole);
+      } else {
+        missingRoles.push(roleInput.id);
+      }
     }
   }
 

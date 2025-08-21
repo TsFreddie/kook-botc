@@ -462,7 +462,7 @@
 
       <form id="scriptForm">
         <div class="form-group">
-          <label for="jsonFile">上传 JSON 文件（可选）</label>
+          <label for="jsonFile">上传 JSON 文件</label>
           <div class="file-input" id="fileInput">
             <input type="file" id="jsonFile" accept=".json" style="display: none" />
             <p>点击此处或拖拽 JSON 文件到这里</p>
@@ -477,18 +477,18 @@
 
         <div class="row">
           <div class="form-group">
-            <label for="scriptName">剧本名称（可选）</label>
+            <label for="scriptName">剧本名称</label>
             <input type="text" id="scriptName" placeholder="输入剧本名称" />
           </div>
           <div class="form-group">
-            <label for="author">作者（可选）</label>
+            <label for="author">作者</label>
             <input type="text" id="author" placeholder="输入作者名称" />
           </div>
         </div>
 
         <div class="row">
           <div class="form-group">
-            <label for="difficulty">难度（可选）</label>
+            <label for="difficulty">难度</label>
             <select id="difficulty">
               <option value="">选择难度</option>
               <option value="1">1 - ★☆☆☆☆</option>
@@ -499,11 +499,11 @@
             </select>
           </div>
           <div class="form-group">
-            <label for="minPlayers">最少人数（可选）</label>
+            <label for="minPlayers">最少人数</label>
             <input type="number" id="minPlayers" min="5" max="20" placeholder="5" />
           </div>
           <div class="form-group">
-            <label for="maxPlayers">最多人数（可选）</label>
+            <label for="maxPlayers">最多人数</label>
             <input type="number" id="maxPlayers" min="5" max="20" placeholder="15" />
           </div>
         </div>
@@ -836,11 +836,20 @@
           currentScriptData = parsed;
         }
 
-        // Auto-fill form fields if they exist in JSON
-        if (currentScriptData.name)
-          document.getElementById('scriptName').value = currentScriptData.name;
-        if (currentScriptData.author)
-          document.getElementById('author').value = currentScriptData.author;
+        // Extract _meta object if present and use its information
+        let metaObject = null;
+        if (currentScriptData.roles && Array.isArray(currentScriptData.roles)) {
+          metaObject = currentScriptData.roles.find(role => role.id === '_meta');
+        }
+
+        // Auto-fill form fields, preferring meta object values
+        const scriptName = metaObject?.name || currentScriptData.name;
+        const scriptAuthor = metaObject?.author || currentScriptData.author;
+
+        if (scriptName)
+          document.getElementById('scriptName').value = scriptName;
+        if (scriptAuthor)
+          document.getElementById('author').value = scriptAuthor;
         if (currentScriptData.level)
           document.getElementById('difficulty').value = currentScriptData.level;
         if (currentScriptData.min_player)
@@ -861,7 +870,8 @@
         const summaryText = document.getElementById('summaryText');
 
         if (currentScriptData && currentScriptData.roles) {
-          const roleCount = currentScriptData.roles.length;
+          const actualRoles = currentScriptData.roles.filter(role => role.id !== '_meta');
+          const roleCount = actualRoles.length;
           summaryText.textContent = `已加载 ${roleCount} 个角色`;
 
           fileInput.style.display = 'none';
@@ -917,6 +927,11 @@
 
           // Use the current script data
           scriptData = { ...currentScriptData };
+
+          // Filter out _meta objects from roles before sending to backend
+          if (scriptData.roles && Array.isArray(scriptData.roles)) {
+            scriptData.roles = scriptData.roles.filter(role => role.id !== '_meta');
+          }
 
           // Override with form values if provided
           const name = document.getElementById('scriptName').value.trim();

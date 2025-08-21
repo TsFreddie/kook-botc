@@ -1,7 +1,4 @@
-import data from './data.json';
-import { validateRoles, type ScriptInput } from './validator';
-
-type Role = (typeof data)[number];
+import { validateRoles, type ScriptInput, type Role } from './validator';
 
 const TEAM_NAMES = {
   townsfolk: '•──⋅☾　镇　民　☽⋅──•',
@@ -13,8 +10,14 @@ const TEAM_NAMES = {
 /**
  * Get role icon URL for custom icon tag
  */
-function getRoleIconUrl(roleId: string): string {
-  return `/icons/${roleId}.png`;
+function getRoleIconUrl(role: Role): string | undefined {
+  // If role has a custom image and it's not 'none', use it
+  if (role.image) {
+    if (role.image == 'none') return undefined;
+    return role.image;
+  }
+  // Otherwise use the default icon path
+  return `/icons/${role.id}.png`;
 }
 
 /**
@@ -130,7 +133,7 @@ function generateHTML(
 
   // Find the first demon for social media icon, fallback to favicon
   const firstDemon = categorizedRoles.demon?.[0];
-  const socialIcon = firstDemon ? getRoleIconUrl(firstDemon.id) : '/favicons/favicon-32x32.png';
+  const socialIcon = firstDemon ? getRoleIconUrl(firstDemon) : '/favicons/favicon-32x32.png';
   const socialIconAlt = firstDemon ? firstDemon.name : '钟楼谜团';
 
   // Generate description for social media
@@ -439,10 +442,12 @@ function generateHTML(
       html += `
         <div class="role">`;
 
-      // Role icon using custom icon tag
-      const iconUrl = getRoleIconUrl(role.id);
-      html += `
+      // Role icon using custom icon tag - only render if image is not 'none'
+      if (role.image !== 'none') {
+        const iconUrl = getRoleIconUrl(role);
+        html += `
             <icon src="${iconUrl}" alt="${escapeHtml(role.name)}" class="role-icon"></icon>`;
+      }
 
       html += `
             <div class="role-content">
@@ -545,10 +550,12 @@ function generateHTML(
                     }
                 } catch (error) {
                     console.warn('Failed to load icon:', src, error);
-                    // Replace with empty div on error
-                    const div = document.createElement('div');
-                    div.className = className;
-                    iconEl.parentNode.replaceChild(div, iconEl);
+                    // Replace with img tag using URL as src instead of data URI
+                    const img = document.createElement('img');
+                    img.src = src;
+                    img.alt = alt;
+                    img.className = className;
+                    iconEl.parentNode.replaceChild(img, iconEl);
                     return { success: false, element: iconEl, error };
                 }
             });
