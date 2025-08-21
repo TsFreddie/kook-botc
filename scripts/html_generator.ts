@@ -165,6 +165,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             gap: 0.5em;
         }
         .role-icon {
+            margin-top: 0.5em;
             width: 48px;
             height: 48px;
             flex-shrink: 0;
@@ -186,31 +187,40 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
         .team-roles {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 0.5em 1em;
+            gap: 0.5em 2em;
         }
         @media (max-width: 480px) {
             .team-roles {
-                display: block;
+                display: flex;
+                flex-direction: column;
+                gap: 0.5em;
             }
         }`
             : ''
         }
-        .theme-toggle {
+        .header-buttons {
             position: fixed;
             top: 10px;
             right: 10px;
+            display: flex;
+            gap: 8px;
+            z-index: 1000;
+        }
+        .theme-toggle, .download-btn {
             background: #f0f0f0;
             border: 1px solid #ccc;
             border-radius: 4px;
             padding: 8px 12px;
             cursor: pointer;
             font-size: 0.9em;
-            z-index: 1000;
         }
         .theme-toggle::before {
             content: "🌙";
         }
-        .theme-toggle:hover {
+        .download-btn::before {
+            content: "📥";
+        }
+        .theme-toggle:hover, .download-btn:hover {
             background: #e0e0e0;
         }
         @media (prefers-color-scheme: dark) {
@@ -227,7 +237,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             hr {
                 border-color: #444;
             }
-            .theme-toggle {
+            .theme-toggle, .download-btn {
                 background: #333;
                 color: #e0e0e0;
                 border-color: #555;
@@ -235,7 +245,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
             .theme-toggle::before {
                 content: "☀️";
             }
-            .theme-toggle:hover {
+            .theme-toggle:hover, .download-btn:hover {
                 background: #444;
             }
         }
@@ -252,7 +262,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
         body.revert hr {
             border-color: #ccc;
         }
-        body.revert .theme-toggle {
+        body.revert .theme-toggle, body.revert .download-btn {
             background: #f0f0f0;
             color: black;
             border-color: #ccc;
@@ -260,7 +270,7 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
         body.revert .theme-toggle::before {
             content: "🌙";
         }
-        body.revert .theme-toggle:hover {
+        body.revert .theme-toggle:hover, body.revert .download-btn:hover {
             background: #e0e0e0;
         }
         .footer {
@@ -296,7 +306,10 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
     <h1>${escapeHtml(scriptData.name)}</h1>
     ${scriptData.author ? `<span> by ${escapeHtml(scriptData.author)}</span>` : ''}
     ${generateSubInfo(scriptData)}
-    <button class="theme-toggle" onclick="toggleTheme()"></button>
+    <div class="header-buttons">
+        <button class="download-btn" onclick="downloadPage()"></button>
+        <button class="theme-toggle" onclick="toggleTheme()"></button>
+    </div>
     <hr>`;
 
   // Add teams
@@ -347,6 +360,35 @@ function generateHTML(scriptData: ScriptInput, categorizedRoles: Record<string, 
     </div>
 
     <script>
+        function downloadPage() {
+            // Clone the entire document
+            const clonedDoc = document.cloneNode(true);
+
+            // Remove the download button from the cloned document
+            const downloadBtn = clonedDoc.querySelector('.download-btn');
+            if (downloadBtn) {
+                downloadBtn.remove();
+            }
+
+            // Get the HTML content
+            const htmlContent = '<!DOCTYPE html>\\n' + clonedDoc.documentElement.outerHTML;
+
+            // Create blob and download
+            const blob = new Blob([htmlContent], { type: 'text/html' });
+            const url = URL.createObjectURL(blob);
+
+            // Create download link
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = '${escapeHtml(scriptData.name)}.html';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+
+            // Clean up
+            URL.revokeObjectURL(url);
+        }
+
         function toggleTheme() {
             const body = document.body;
             const savedMode = localStorage.getItem('themeMode');
