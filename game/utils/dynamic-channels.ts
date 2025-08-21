@@ -9,6 +9,7 @@ import { SequentialQueue } from './queue';
 export class DynamicChannels {
   private channels = new Map<string, string>();
   private cottages = new Map<string, string>();
+  private createdChannels = new Set<string>();
   private queue: SequentialQueue = new SequentialQueue();
   private playerThrottleTimer = new Map<string, NodeJS.Timeout>();
   private destroyed = false;
@@ -95,6 +96,7 @@ export class DynamicChannels {
       });
 
       this.register.addChannel(newChannel.id);
+      this.createdChannels.add(newChannel.id);
       this.channels.set(name, newChannel.id);
 
       // 配置频道权限
@@ -105,10 +107,7 @@ export class DynamicChannels {
           channel_id: newChannel.id,
           type: 'role_id',
           value: this.roleId,
-          allow:
-            (this.showingLocations ? Permission.VIEW_CHANNELS : 0) |
-            Permission.CONNECT_VOICE |
-            Permission.PASSIVE_CONNECT_VOICE,
+          allow: (this.showingLocations ? Permission.VIEW_CHANNELS : 0) | Permission.CONNECT_VOICE,
         });
       } catch (err) {
         console.error(err);
@@ -214,6 +213,7 @@ export class DynamicChannels {
         parent_id: GAME.cottageCategoryId,
       });
       this.register.addChannel(newChannel.id);
+      this.createdChannels.add(newChannel.id);
 
       // 配置频道权限(仅用户自己与说书人可见)
       const permissionUpdates = [
@@ -223,21 +223,30 @@ export class DynamicChannels {
                 channel_id: newChannel.id,
                 type: 'user_id',
                 value: userId,
-                allow: Permission.VIEW_CHANNELS,
+                allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
               }
             : {
                 channel_id: newChannel.id,
                 type: 'user_id',
                 value: userId,
-                deny: Permission.VIEW_CHANNELS,
+                deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
               },
         ),
-        BOT.api.channelRoleUpdate({
-          channel_id: newChannel.id,
-          type: 'user_id',
-          value: this.storytellerId,
-          allow: Permission.VIEW_CHANNELS,
-        }),
+        BOT.api.channelRoleUpdate(
+          this.showingCottages
+            ? {
+                channel_id: newChannel.id,
+                type: 'user_id',
+                value: this.storytellerId,
+                allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+              }
+            : {
+                channel_id: newChannel.id,
+                type: 'user_id',
+                value: this.storytellerId,
+                deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+              },
+        ),
       ];
 
       const result = await Promise.allSettled(permissionUpdates);
@@ -339,15 +348,13 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'user_id',
             value: userId,
-            allow: Permission.VIEW_CHANNELS,
-            deny: 0,
+            allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
           }),
           BOT.api.channelRoleUpdate({
             channel_id: channelId,
             type: 'user_id',
             value: this.storytellerId,
-            allow: Permission.VIEW_CHANNELS,
-            deny: 0,
+            allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
           }),
         );
       });
@@ -432,6 +439,7 @@ export class DynamicChannels {
     if (!cottage) return;
 
     this.cottages.delete(userId);
+    this.createdChannels.delete(cottage);
     this.register.removeChannel(cottage);
 
     this.queue.push(async () => {
@@ -451,7 +459,7 @@ export class DynamicChannels {
     await this.queue.destroy(true);
 
     // 销毁所有频道
-    const channels = [...this.channels.values(), ...this.cottages.values()];
+    const channels = [...this.createdChannels.values()];
 
     channels.forEach((channel) => {
       this.register.removeChannel(channel);
@@ -460,6 +468,9 @@ export class DynamicChannels {
     const result = await Promise.allSettled(
       channels.map((channel) => BOT.api.channelDelete(channel)),
     );
+
+    this.cottages.clear();
+    this.channels.clear();
 
     result.forEach((result) => {
       if (result.status == 'rejected') {
