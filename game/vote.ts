@@ -104,6 +104,8 @@ export class VoteManager {
     this._voteOffset = 0;
 
     this.updateVotingLine();
+
+    this.state.voteInfo.set(`(font)说书人(font)[warning]发起了投票`);
     // 开启投票状态
     this.state.voting.set(true);
     // 禁用倒计时
