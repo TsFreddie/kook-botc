@@ -859,6 +859,8 @@ export class Session {
       this.internalAddPlayer(userId);
     }
 
+    // 更改旁观状态后刷新禁言状态
+    this.updateMuteState();
     this.updatePlayerList();
   }
 
