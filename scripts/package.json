@@ -1,0 +1,14 @@
+{
+  "name": "script-viewer",
+  "version": "1.0.0",
+  "description": "Blood on the Clocktower Script Viewer",
+  "main": "server.ts",
+  "scripts": {
+    "start": "bun run server.ts",
+    "dev": "bun run --watch server.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
