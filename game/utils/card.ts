@@ -78,6 +78,9 @@ export abstract class Card<T extends object> {
   /** 上次处理时间戳 */
   private lastProcessTime = 0;
 
+  /** 上次渲染的字符串，用于激进检查 */
+  private lastRenderedString: string = '';
+
   abstract render(state: T): {
     content: string;
     template_id?: string;
@@ -92,8 +95,12 @@ export abstract class Card<T extends object> {
 
     /** 首次更新等待，单位毫秒 */
     private initialDelay = 0,
+
+    /** 是否启用激进检查，比较渲染字符串跳过相同更新 */
+    private aggressiveCheck = false,
   ) {
     this.state = state;
+    this.aggressiveCheck = aggressiveCheck;
     for (const [key, value] of Object.entries(this.state)) {
       this.registerStateListener(key, value);
     }
@@ -141,6 +148,8 @@ export abstract class Card<T extends object> {
 
     await this.queue.push(async () => {
       const rendered = this.render(this.state);
+      const renderedString = JSON.stringify(rendered);
+
       this.id = (
         await BOT.api.messageCreate({
           target_id: targetId,
@@ -149,6 +158,12 @@ export abstract class Card<T extends object> {
           template_id: rendered.template_id,
         })
       ).msg_id;
+
+      // 保存渲染字符串用于激进检查
+      if (this.aggressiveCheck) {
+        this.lastRenderedString = renderedString;
+      }
+
       this.lastProcessTime = Date.now();
     });
   }
@@ -179,12 +194,24 @@ export abstract class Card<T extends object> {
 
       await this.ensureMinInterval();
       const rendered = this.render(this.state);
+      const renderedString = JSON.stringify(rendered);
+
+      // 激进检查：如果渲染字符串相同则跳过更新
+      if (this.aggressiveCheck && this.lastRenderedString === renderedString) {
+        return;
+      }
+
       try {
         await BOT.api.messageUpdate({
           msg_id: this.id,
           content: rendered.content,
           template_id: rendered.template_id,
         });
+
+        // 更新成功后保存新的渲染字符串
+        if (this.aggressiveCheck) {
+          this.lastRenderedString = renderedString;
+        }
       } catch (err) {
         if (!this.suppressError) {
           throw err;
