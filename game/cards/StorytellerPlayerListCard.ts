@@ -160,6 +160,11 @@ class CardRenderer extends Card<Props> {
         groups.push([
           { text: '每人时间', theme: 'secondary' },
           {
+            text: '1秒',
+            theme: voteTime === 1 ? 'info' : 'secondary',
+            value: '[st]SetVoteTime|1',
+          },
+          {
             text: '3秒',
             theme: voteTime === 3 ? 'info' : 'secondary',
             value: '[st]SetVoteTime|3',
@@ -168,11 +173,6 @@ class CardRenderer extends Card<Props> {
             text: '5秒',
             theme: voteTime === 5 ? 'info' : 'secondary',
             value: '[st]SetVoteTime|5',
-          },
-          {
-            text: '8秒',
-            theme: voteTime === 8 ? 'info' : 'secondary',
-            value: '[st]SetVoteTime|8',
           },
         ]);
         theme = 'danger';

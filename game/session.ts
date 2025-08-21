@@ -811,8 +811,8 @@ export class Session {
 
   protected storytellerListNominate() {
     this.listSelection = new Set();
-    this.state.listArg.set(5); // 默认每人5秒
-    this.vote.voteTime = 5;
+    this.state.listArg.set(3); // 默认每人3秒
+    this.vote.voteTime = 3;
     this.state.listMode.set(ListMode.NOMINATE);
     this.updatePlayerList();
   }
