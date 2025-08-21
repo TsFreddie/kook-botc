@@ -329,4 +329,4 @@ class CardRenderer extends Card<Props> {
   }
 }
 
-export default (state: Props) => $card(new CardRenderer(state, 100, 250));
+export default (state: Props) => $card(new CardRenderer(state, 100, 250, true));
