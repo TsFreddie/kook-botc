@@ -6,10 +6,10 @@
     <title>《染・钟楼谜团》剧本查看器</title>
 
     <!-- Favicons -->
-    <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicons/favicon-16x16.png">
-    <link rel="manifest" href="/favicons/site.webmanifest">
+    <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png" />
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicons/favicon-16x16.png" />
+    <link rel="manifest" href="/favicons/site.webmanifest" />
     <style>
       body {
         font-family:
@@ -229,7 +229,7 @@
       }
 
       .theme-toggle {
-        position: fixed;
+        position: absolute;
         top: 10px;
         right: 10px;
         width: 50px;
@@ -440,6 +440,83 @@
       body.revert .footer {
         border-top-color: #ccc;
         color: #666;
+      }
+
+      /* Mobile optimizations */
+      @media (max-width: 768px) {
+        body {
+          padding: 10px;
+        }
+        .container {
+          padding: 15px;
+        }
+        .preset-section {
+          padding: 6px 10px;
+          margin-bottom: 20px;
+        }
+        .theme-toggle {
+          top: 5px;
+          right: 5px;
+          padding: 6px 10px;
+        }
+        .file-input {
+          padding: 5px 10px;
+        }
+        .file-summary {
+          padding: 5px 10px;
+        }
+        .result {
+          padding: 10px;
+        }
+        .footer {
+          margin-top: 1.5em;
+          padding-top: 0.8em;
+        }
+      }
+
+      @media (max-width: 480px) {
+        body {
+          padding: 5px;
+        }
+        .container {
+          padding: 10px;
+        }
+        .preset-section {
+          padding: 4px 8px;
+          margin-bottom: 15px;
+        }
+        .row {
+          flex-direction: column;
+          gap: 10px;
+        }
+        .link-container {
+          flex-direction: column;
+          gap: 8px;
+        }
+        .copy-btn {
+          width: 100%;
+          margin: 0;
+        }
+        .preset-buttons {
+          grid-template-columns: 1fr;
+        }
+        .preset-btn {
+          padding: 8px 10px;
+        }
+        h1 {
+          font-size: 1.1em;
+          margin-bottom: 15px;
+        }
+        .form-group {
+          margin-bottom: 15px;
+        }
+        input,
+        select {
+          padding: 8px;
+        }
+        button {
+          padding: 10px 20px;
+        }
       }
     </style>
   </head>
@@ -840,17 +917,15 @@
         // Extract _meta object if present and use its information
         let metaObject = null;
         if (currentScriptData.roles && Array.isArray(currentScriptData.roles)) {
-          metaObject = currentScriptData.roles.find(role => role.id === '_meta');
+          metaObject = currentScriptData.roles.find((role) => role.id === '_meta');
         }
 
         // Auto-fill form fields, preferring meta object values
         const scriptName = metaObject?.name || currentScriptData.name;
         const scriptAuthor = metaObject?.author || currentScriptData.author;
 
-        if (scriptName)
-          document.getElementById('scriptName').value = scriptName;
-        if (scriptAuthor)
-          document.getElementById('author').value = scriptAuthor;
+        if (scriptName) document.getElementById('scriptName').value = scriptName;
+        if (scriptAuthor) document.getElementById('author').value = scriptAuthor;
         if (currentScriptData.level)
           document.getElementById('difficulty').value = currentScriptData.level;
         if (currentScriptData.min_player)
@@ -871,7 +946,7 @@
         const summaryText = document.getElementById('summaryText');
 
         if (currentScriptData && currentScriptData.roles) {
-          const actualRoles = currentScriptData.roles.filter(role => role.id !== '_meta');
+          const actualRoles = currentScriptData.roles.filter((role) => role.id !== '_meta');
           const roleCount = actualRoles.length;
           summaryText.textContent = `已加载 ${roleCount} 个角色`;
 
@@ -931,7 +1006,7 @@
 
           // Filter out _meta objects from roles before sending to backend
           if (scriptData.roles && Array.isArray(scriptData.roles)) {
-            scriptData.roles = scriptData.roles.filter(role => role.id !== '_meta');
+            scriptData.roles = scriptData.roles.filter((role) => role.id !== '_meta');
           }
 
           // Override with form values if provided
