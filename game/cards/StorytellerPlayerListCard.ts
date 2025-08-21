@@ -41,6 +41,14 @@ class CardRenderer extends Card<Props> {
     let action: { text: string; theme: ButtonTheme } | undefined;
     let theme: ButtonTheme = 'secondary';
 
+    // 倒计时配置
+    if (state.votingStart.value > 0 && state.votingEnd.value > 0) {
+      countdown = {
+        start: state.votingStart.value,
+        end: state.votingEnd.value,
+      };
+    }
+
     // storyteller player
     let value = '';
 
@@ -57,7 +65,6 @@ class CardRenderer extends Card<Props> {
         groups.push([
           { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
           { text: '提名', theme: 'danger', value: '[st]ListNominate' },
-          { text: '投票', theme: 'primary', value: '[st]LiteVote' },
           { text: '上麦', theme: 'success', value: '[st]ListSpotlight' },
         ]);
         theme = 'secondary';
@@ -69,9 +76,10 @@ class CardRenderer extends Card<Props> {
         status = '**(font)换座模式(font)[primary]**\n选择两名玩家交换座位';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         theme = 'primary';
-        action = state.listSelected.length > 0
-          ? { text: '交换', theme: 'success' }
-          : { text: '选择', theme: 'primary' };
+        action =
+          state.listSelected.length > 0
+            ? { text: '交换', theme: 'success' }
+            : { text: '选择', theme: 'primary' };
         value = 'Swap';
         break;
 
@@ -126,24 +134,49 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.NOMINATE:
-        status = state.listSelected.length > 0
-          ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票是否处决指定玩家'
-          : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
-        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        const voteTime = state.listArg.value;
+        status =
+          state.listSelected.length > 0
+            ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票是否处决指定玩家'
+            : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
+        groups.push([
+          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '普通投票', theme: 'info', value: '[st]NormalVote' },
+        ]);
+        groups.push([
+          { text: '每人时间', theme: 'secondary' },
+          {
+            text: '3秒',
+            theme: voteTime === 3 ? 'info' : 'secondary',
+            value: '[st]SetVoteTime|3',
+          },
+          {
+            text: '5秒',
+            theme: voteTime === 5 ? 'info' : 'secondary',
+            value: '[st]SetVoteTime|5',
+          },
+          {
+            text: '8秒',
+            theme: voteTime === 8 ? 'info' : 'secondary',
+            value: '[st]SetVoteTime|8',
+          },
+        ]);
         theme = 'danger';
         action = { text: '选择', theme: 'info' };
         value = 'Nominate';
         break;
 
-      case ListMode.VOTE:
+      case ListMode.VOTING:
         status = state.voteInfo.value || '投票进行中';
-        if (state.votingStart.value > 0 && state.votingEnd.value > 0) {
-          countdown = {
-            start: state.votingStart.value,
-            end: state.votingEnd.value,
-          };
-        }
-        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        let started = state.votingStart.value > 0;
+        groups.push([
+          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
+          started
+            ? { text: '重新开始', theme: 'danger', value: '[st]StopVoting' }
+            : { text: '开始投票', theme: 'info', value: `[st]StartVoting` },
+        ]);
         groups.push([
           { text: '　', theme: 'secondary' },
           { text: '　', theme: 'secondary' },
@@ -151,7 +184,7 @@ class CardRenderer extends Card<Props> {
           { text: '+1', theme: 'info', value: '[st]VoteAdd' },
         ]);
         theme = 'primary';
-        value = 'Vote';
+        value = 'Voting';
         break;
     }
 
@@ -237,9 +270,9 @@ class CardRenderer extends Card<Props> {
           }
           break;
 
-        case ListMode.VOTE:
+        case ListMode.VOTING:
           if (selectedSet.has(item.id)) {
-            action = { text: '切换', theme: 'secondary' };
+            action = { text: '切换', theme: 'info' };
           }
           break;
       }
@@ -266,4 +299,4 @@ class CardRenderer extends Card<Props> {
   }
 }
 
-export default (state: Props) => $card(new CardRenderer(state));
+export default (state: Props) => $card(new CardRenderer(state, 100, 250));

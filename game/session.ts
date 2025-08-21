@@ -13,11 +13,12 @@ import {
 import { MessageType, type TextMessageEvent } from '../lib/events';
 import { imageModule, markdownModule, textModule } from '../templates/modules';
 import { BOT } from '../bot';
+import { VoteManager } from './vote';
 
 /**
  * Deep comparison utility for arrays and objects
  */
-function deepEqual(a: any, b: any): boolean {
+const deepEqual = (a: any, b: any) => {
   if (a === b) return true;
 
   if (a == null || b == null) return a === b;
@@ -46,7 +47,7 @@ function deepEqual(a: any, b: any): boolean {
   }
 
   return false;
-}
+};
 
 export enum Phase {
   /** 初始化状态，期间不能进行任何操作 */
@@ -100,8 +101,8 @@ export enum ListMode {
   PRIVATE,
   /** 提名 */
   NOMINATE,
-  /** 投票 */
-  VOTE,
+  /** 正在投票 */
+  VOTING,
 }
 
 export interface ListPlayerItem {
@@ -150,10 +151,26 @@ export interface GameState {
   townsquareCards: CArray<any>;
 }
 
+export enum PlayerVoteStatus {
+  /** 未计入 */
+  NONE = 0,
+  /** 正记入 */
+  COUNTING,
+  /** 已计入 */
+  COUNTED,
+}
+
 /** 玩家状态 */
-interface PlayerState {
+export interface PlayerState {
   id: string;
   status: PlayerStatus;
+
+  /** 投票状态 */
+  vote: {
+    /** 票数 */
+    count: number;
+    status: PlayerVoteStatus;
+  };
 }
 
 const SEP = '　';
@@ -189,11 +206,14 @@ export class Session {
     townsquareCards: $array([]),
   };
 
-  private players: PlayerState[] = [];
+  private readonly players: PlayerState[] = [];
   private register: Register;
   private destroyed = false;
   private greeted = new Set<string>();
   private userInfoCards = new Map<string, { seq: number; card: any[] }>();
+
+  /** 投票管理 */
+  private readonly vote = new VoteManager(this.players, this.state, () => this.updatePlayerList());
 
   /** 是否允许旁观者在游戏过程中发言 */
   private spectatorVoice = false;
@@ -345,6 +365,10 @@ export class Session {
     this.players.push({
       id: user,
       status: PlayerStatus.ALIVE,
+      vote: {
+        count: 0,
+        status: PlayerVoteStatus.NONE,
+      },
     });
     this.updatePlayerList();
   }
@@ -465,12 +489,23 @@ export class Session {
     // 玩家顺序：按槽位游戏玩家 -> 说书人 -> 旁观玩家
     const joinedPlayers = new Set(this.register.getJoinedPlayers());
 
+    const voteToEmoji = (vote: { count: number; status: PlayerVoteStatus }) => {
+      if (vote.status === PlayerVoteStatus.COUNTING) {
+        return `➡️ ${vote.count === 0 ? '⬛' : vote.count === 1 ? '✅' : '2️⃣'}`;
+      } else if (vote.status === PlayerVoteStatus.COUNTED) {
+        return `🔒 ${vote.count === 0 ? '❌' : vote.count === 1 ? '✅' : '2️⃣'}`;
+      } else {
+        return `🔹 ${vote.count === 0 ? '⬛' : vote.count === 1 ? '✅' : '2️⃣'}`;
+      }
+    };
+
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
+      const vote = this.state.voting.value ? `${SEP}${voteToEmoji(p.vote)}` : '';
       return {
         type: 'player',
         id: p.id,
         joined: joinedPlayers.has(p.id),
-        info: `(font)${CIRCLED_NUMBERS[index] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'body' : 'tips'}]${SEP}${statusToColumns(p.status)}${SEP}(met)${p.id}(met)`,
+        info: `(font)${CIRCLED_NUMBERS[index + 1] || '⓪'}(font)[${this.townsquareUsers.has(p.id) ? 'success' : 'tips'}]${SEP}${statusToColumns(p.status)}${vote}${SEP}(met)${p.id}(met)`,
       };
     });
 
@@ -496,7 +531,7 @@ export class Session {
         type: 'spectator',
         id: userId,
         joined: true,
-        info: `(font)旁观者(font)[tips]${SEP}(met)${userId}(met)`,
+        info: `(font)旁观者(font)[${this.townsquareUsers.has(userId) ? 'success' : 'tips'}]${SEP}(met)${userId}(met)`,
       });
     });
 
@@ -509,8 +544,16 @@ export class Session {
     }
 
     // 更新选择状态
-    this.state.listSelected.length = 0;
-    this.state.listSelected.push(...Array.from(this.listSelection));
+    if (this.state.listMode.value === ListMode.VOTING) {
+      this.state.listSelected.length = 0;
+      // 投票状态时选择列表为玩家是否已锁定
+      this.state.listSelected.push(
+        ...this.players.filter((p) => p.vote.status === PlayerVoteStatus.COUNTED).map((p) => p.id),
+      );
+    } else {
+      this.state.listSelected.length = 0;
+      this.state.listSelected.push(...Array.from(this.listSelection));
+    }
   }
 
   protected storytellerGameStart() {
@@ -635,7 +678,6 @@ export class Session {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.STATUS);
-    this.updatePlayerList();
 
     // 从上麦状态退出时需要更新禁言状态
     if (previousListMode === ListMode.SPOTLIGHT) {
@@ -646,6 +688,15 @@ export class Session {
     if (previousListMode === ListMode.PRIVATE) {
       this.updateMessagingCard();
     }
+
+    // 从投票中退出时
+    if (previousListMode === ListMode.VOTING) {
+      this.vote.exit();
+      // exit 中会更新，不用更新两次
+      return;
+    }
+
+    this.updatePlayerList();
   }
 
   protected storytellerListSwap() {
@@ -705,15 +756,9 @@ export class Session {
 
   protected storytellerListNominate() {
     this.listSelection = new Set();
-    this.state.listArg.set(0);
+    this.state.listArg.set(5); // 默认每人5秒
+    this.vote.voteTime = 5;
     this.state.listMode.set(ListMode.NOMINATE);
-    this.updatePlayerList();
-  }
-
-  protected storytellerLiteVote() {
-    this.listSelection = new Set();
-    this.state.listArg.set(0);
-    this.state.listMode.set(ListMode.VOTE);
     this.updatePlayerList();
   }
 
@@ -844,43 +889,90 @@ export class Session {
   protected storytellerSelectNominate(userId: string) {
     if (this.state.listMode.value !== ListMode.NOMINATE) return;
 
-    // TODO: 正式提名模式
     // 只有玩家可以被提名
     if (!this.internalHasPlayer(userId)) return;
 
-    if (this.listSelection.has(userId)) {
-      this.listSelection.delete(userId);
-    } else {
-      this.listSelection.clear(); // 提名只能选择一个玩家
+    // 无选择，选中
+    if (this.listSelection.size == 0) {
       this.listSelection.add(userId);
+      this.updatePlayerList();
+      return;
     }
 
+    // 可以投自己，所以不需要判断是否已选中，可以直接开启投票
+    const nominator = this.listSelection.values().next().value;
+    if (!nominator) return;
+
+    // 切换到投票模式
+    this.listSelection = new Set();
+    this.state.listMode.set(ListMode.VOTING);
+    this.state.listArg.set(1);
+
+    this.vote.enterNomination(nominator, userId);
+    this.updatePlayerList();
+    return;
+  }
+
+  /**
+   * 进入普通投票模式
+   */
+  protected storytellerNormalVote() {
+    if (this.state.listMode.value === ListMode.VOTING) return;
+
+    this.listSelection = new Set();
+    this.state.listMode.set(ListMode.VOTING);
+    this.state.listArg.set(0);
+
+    this.vote.enterNormal();
     this.updatePlayerList();
   }
 
-  protected storytellerSelectVote(userId: string) {
-    if (this.state.listMode.value !== ListMode.VOTE) return;
+  /**
+   * 说书人可以更改玩家投票
+   */
+  protected storytellerSelectVoting(userId: string) {
+    if (this.state.listMode.value !== ListMode.VOTING) return;
 
-    // 只有玩家可以投票
-    if (!this.internalHasPlayer(userId)) return;
-
-    if (this.listSelection.has(userId)) {
-      this.listSelection.delete(userId);
-    } else {
-      this.listSelection.add(userId);
-    }
-
+    this.vote.voteToggle(userId);
     this.updatePlayerList();
+  }
+
+  protected storytellerSetVoteTime(time: string) {
+    if (this.state.listMode.value !== ListMode.NOMINATE) return;
+
+    const voteTime = parseInt(time);
+    if (isNaN(voteTime) || voteTime <= 0) return;
+
+    this.state.listArg.set(voteTime);
+    this.vote.voteTime = voteTime;
+  }
+
+  /**
+   * 开始投票
+   * @param time 投票时间（秒）
+   */
+  protected storytellerStartVoting() {
+    // 必须已经在投票状态才能开始
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.start();
+  }
+
+  /**
+   * 停止投票（不会退出投票状态，只是重置投票，方便重新开始）
+   */
+  protected storytellerStopVoting() {
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.reset();
   }
 
   protected storytellerVoteAdd() {
-    if (this.state.listMode.value !== ListMode.VOTE) return;
-    // TODO: 实现投票+1逻辑
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.voteAdd();
   }
 
   protected storytellerVoteRemove() {
-    if (this.state.listMode.value !== ListMode.VOTE) return;
-    // TODO: 实现投票-1逻辑
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.voteRemove();
   }
 
   protected storytellerClearGlobalCard() {
@@ -906,9 +998,7 @@ export class Session {
 
     // 只有玩家可以投票
     if (!this.internalHasPlayer(userId)) return;
-
-    // TODO: 实现不投票逻辑
-    console.log(`Player ${userId} chose not to vote`);
+    this.vote.playerVoteNone(userId);
   }
 
   protected playerVoteOne(userId: string) {
@@ -916,9 +1006,7 @@ export class Session {
 
     // 只有玩家可以投票
     if (!this.internalHasPlayer(userId)) return;
-
-    // TODO: 实现投票逻辑
-    console.log(`Player ${userId} voted once`);
+    this.vote.playerVoteOne(userId);
   }
 
   protected playerVoteTwo(userId: string) {
@@ -926,12 +1014,7 @@ export class Session {
 
     // 只有玩家可以投票
     if (!this.internalHasPlayer(userId)) return;
-
-    // 只有当 listArg 为 1 时才能投两票
-    if (this.state.listArg.value !== 1) return;
-
-    // TODO: 实现投两票逻辑
-    console.log(`Player ${userId} voted twice`);
+    this.vote.playerVoteTwo(userId);
   }
 
   /**

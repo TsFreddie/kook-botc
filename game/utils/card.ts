@@ -88,7 +88,10 @@ export abstract class Card<T extends object> {
     private state: T,
 
     /** 最小更新间隔，单位毫秒 */
-    private minInterval = 250,
+    private minInterval = 0,
+
+    /** 首次更新等待，单位毫秒 */
+    private initialDelay = 0,
   ) {
     this.state = state;
     for (const [key, value] of Object.entries(this.state)) {
@@ -169,6 +172,11 @@ export abstract class Card<T extends object> {
     }
 
     this.queue.push(async () => {
+      if (this.initialDelay && this.queue.size() === 0) {
+        // 首次更新等待
+        await new Promise((resolve) => setTimeout(resolve, this.initialDelay));
+      }
+
       await this.ensureMinInterval();
       const rendered = this.render(this.state);
       try {

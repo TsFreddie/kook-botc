@@ -11,14 +11,6 @@
           "content": "{{ data.header|json_escape }}"
         }
       }
-{% if data.countdown %}
-      ,{
-        "type": "countdown",
-        "mode": "second",
-        "startTime": {{ data.countdown.start }},
-        "endTime": {{ data.countdown.end }}
-      }
-{% endif %}
 {% if data.groups and data.groups|length > 0 %}
       ,{
         "type": "divider"
@@ -117,6 +109,22 @@
         {% endif %}
       }
     {% endfor %}
+{% endif %}
+{% if data.countdown %}
+      ,{
+        "type": "countdown",
+        "mode": "second",
+        "startTime": {{ data.countdown.start }},
+        "endTime": {{ data.countdown.end }}
+      }
+{% else %}
+      ,{
+        "type": "section",
+        "text": {
+          "type": "plain-text",
+          "content": "　"
+        }
+      }
 {% endif %}
     ]
   }

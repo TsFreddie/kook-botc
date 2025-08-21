@@ -14,7 +14,7 @@ interface Props {
   list: CValue<ListPlayerItem[]>;
 
   /** 列表参数 */
-  listArg: CValue<number>;
+  listArg: CValue<number | number[]>;
 
   /** 投票信息 */
   voteInfo: CValue<string>;
@@ -66,16 +66,6 @@ class CardRenderer extends Card<Props> {
     } else {
       status = '当前没有进行投票';
     }
-
-    // 确保所有按钮组都是4个
-    if (groups.length < 2) {
-      groups.push([]);
-    }
-    groups.forEach((group) => {
-      while (group.length < 4) {
-        (group as any).push({ text: '　', theme: 'secondary' });
-      }
-    });
 
     // 构建玩家列表，不包含任何操作按钮
     const players = state.list.value.map((item) => {

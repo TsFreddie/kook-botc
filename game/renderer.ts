@@ -117,7 +117,7 @@ export class Renderer {
           invite: this.invite,
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
-        }),
+        }, ),
         StorytellerPlayerListCard({
           listMode: this.state.listMode,
           list: this.state.list,
