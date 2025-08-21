@@ -45,6 +45,38 @@ function generateSubInfo(scriptData: ScriptInput): string {
 }
 
 /**
+ * Generate description for social media metadata
+ */
+function generateDescription(scriptData: ScriptInput): string {
+  const parts: string[] = [];
+
+  // Add author info
+  if (scriptData.author) {
+    parts.push(`剧本设计：${scriptData.author}`);
+  }
+
+  // Add difficulty if level is provided and > 0
+  if (scriptData.level && scriptData.level > 0) {
+    const difficultyStars =
+      '★'.repeat(scriptData.level) + '☆'.repeat(Math.max(0, 5 - scriptData.level));
+    parts.push(`难度：${difficultyStars}`);
+  }
+
+  // Add player count if both min and max are provided and > 0
+  if (
+    scriptData.min_player &&
+    scriptData.max_player &&
+    scriptData.min_player > 0 &&
+    scriptData.max_player > 0
+  ) {
+    parts.push(`推荐人数：${scriptData.min_player} - ${scriptData.max_player}`);
+  }
+
+  // Join with newlines, or provide fallback
+  return parts.length > 0 ? parts.join('\n') : '钟楼谜团剧本';
+}
+
+/**
  * Escape HTML special characters
  */
 function escapeHtml(text: string): string {
@@ -96,11 +128,35 @@ function generateHTML(
   const totalRoles = Object.values(categorizedRoles).reduce((sum, roles) => sum + roles.length, 0);
   const useGrid = totalRoles > 12;
 
+  // Find the first demon for social media icon, fallback to favicon
+  const firstDemon = categorizedRoles.demon?.[0];
+  const socialIcon = firstDemon ? getRoleIconUrl(firstDemon.id) : '/favicons/favicon-32x32.png';
+  const socialIconAlt = firstDemon ? firstDemon.name : '钟楼谜团';
+
+  // Generate description for social media
+  const description = generateDescription(scriptData);
+
   let html = `<!DOCTYPE html>
 <html lang="zh-CN">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本</title>
+    <meta name="description" content="${escapeHtml(description)}">
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website">
+    <meta property="og:title" content="${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本">
+    <meta property="og:description" content="${escapeHtml(description)}">
+    <meta property="og:image" content="${socialIcon}">
+    <meta property="og:image:alt" content="${escapeHtml(socialIconAlt)}">
+
+    <!-- Twitter -->
+    <meta name="twitter:card" content="summary">
+    <meta name="twitter:title" content="${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本">
+    <meta name="twitter:description" content="${escapeHtml(description)}">
+    <meta name="twitter:image" content="${socialIcon}">
+    <meta name="twitter:image:alt" content="${escapeHtml(socialIconAlt)}">
 
     <!-- Favicons -->
     <link rel="apple-touch-icon" sizes="180x180" href="/favicons/apple-touch-icon.png">
@@ -114,6 +170,9 @@ function generateHTML(
         }
         body {
           font-size: 10pt;
+          padding: 0.5em 2em;
+          max-width: 1024px;
+          margin: auto;
         }
         h1 {
           font-size: 1.25em;
@@ -150,6 +209,7 @@ function generateHTML(
         .role-content {
             display: flex;
             flex-direction: column;
+            min-width: 0;
         }
         .role-name {
             margin: 0;
@@ -158,6 +218,50 @@ function generateHTML(
         }
         .role-ability {
             margin: 0;
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+        }
+
+        /* Mobile optimizations */
+        @media (max-width: 640px) {
+            body {
+                font-size: 11pt;
+                padding: 0.75em;
+            }
+            h1 {
+                font-size: 1.4em;
+                display: block;
+                margin-bottom: 0.25em;
+            }
+            .role-icon {
+                width: 40px;
+                height: 40px;
+                margin-top: 0.25em;
+            }
+            .role-name {
+                font-size: 1.05em;
+            }
+        }
+
+        @media (max-width: 480px) {
+            body {
+                font-size: 11pt;
+                padding: 0.5em;
+            }
+            h1 {
+                font-size: 1.5em;
+            }
+            h2 {
+                font-size: 1.2em;
+            }
+            .role {
+                gap: 0.4em;
+            }
+            .role-icon {
+                width: 36px;
+                height: 36px;
+                margin-top: 0.2em;
+            }
         }${
           useGrid
             ? `
@@ -166,17 +270,19 @@ function generateHTML(
             grid-template-columns: 1fr 1fr;
             gap: 0.5em 2em;
         }
-        @media (max-width: 480px) {
+        @media (max-width: 640px) {
             .team-roles {
-                display: flex;
-                flex-direction: column;
+                grid-template-columns: 1fr;
                 gap: 0.5em;
             }
         }`
             : ''
         }
+        .team-header {
+            opacity: 0.6;
+        }
         .header-buttons {
-            position: fixed;
+            position: absolute;
             top: 10px;
             right: 10px;
             display: flex;
@@ -191,6 +297,18 @@ function generateHTML(
             cursor: pointer;
             font-size: 0.9em;
             width: 50px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* Mobile header buttons */
+        @media (max-width: 480px) {
+            .header-buttons {
+                top: 8px;
+                right: 8px;
+                gap: 6px;
+            }
         }
         .theme-toggle::before {
             content: "🌙";
@@ -268,6 +386,15 @@ function generateHTML(
         .footer a:hover {
             text-decoration: underline;
         }
+
+        /* Mobile footer */
+        @media (max-width: 480px) {
+            .footer {
+                font-size: 0.75em;
+                margin-top: 1.5em;
+            }
+        }
+
         @media (prefers-color-scheme: dark) {
             .footer {
                 border-top-color: #444;
@@ -298,7 +425,7 @@ function generateHTML(
     const headerClass = team === 'townsfolk' || team === 'outsider' ? 'blue' : 'red';
 
     html += `
-    <h2 class="${headerClass}">${escapeHtml(teamName)}</h2>`;
+    <h2 class="team-header ${headerClass}">${escapeHtml(teamName)}</h2>`;
 
     if (useGrid) {
       html += `
