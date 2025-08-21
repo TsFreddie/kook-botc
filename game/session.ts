@@ -101,6 +101,8 @@ export enum ListMode {
   PRIVATE,
   /** 提名 */
   NOMINATE,
+  /** 小屋 */
+  COTTAGE,
   /** 正在投票 */
   VOTING,
 }
@@ -550,6 +552,19 @@ export class Session {
       this.state.listSelected.push(
         ...this.players.filter((p) => p.vote.status === PlayerVoteStatus.COUNTED).map((p) => p.id),
       );
+    } else if (this.state.listMode.value === ListMode.COTTAGE) {
+      this.state.listSelected.length = 0;
+      // 小屋模式时检查说书人当前是否在某个玩家的小屋中
+      const dynamicChannels = this.renderer.dynamicChannels;
+      if (dynamicChannels) {
+        const storytellerChannelId = this.activeUsers.get(this.storytellerId);
+        if (storytellerChannelId) {
+          const cottageOwnerId = dynamicChannels.getStorytellerInCottage(storytellerChannelId);
+          if (cottageOwnerId) {
+            this.state.listSelected.push(cottageOwnerId);
+          }
+        }
+      }
     } else {
       this.state.listSelected.length = 0;
       this.state.listSelected.push(...Array.from(this.listSelection));
@@ -558,6 +573,11 @@ export class Session {
 
   protected storytellerGameStart() {
     if (!this.phase(Phase.PREPARING, Phase.FINISH_GOOD, Phase.FINISH_BAD)) return;
+
+    // 如果当前是小屋模式，切换回状态模式
+    if (this.state.listMode.value === ListMode.COTTAGE) {
+      this.storytellerListStatus();
+    }
 
     // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
@@ -570,6 +590,11 @@ export class Session {
   protected storytellerGameDay() {
     if (!this.phase(Phase.NIGHT, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    // 如果当前是小屋模式，切换回状态模式
+    if (this.state.listMode.value === ListMode.COTTAGE) {
+      this.storytellerListStatus();
+    }
 
     this.state.phase.set(Phase.DAY);
     this.internalPlayerToTownsquare();
@@ -591,6 +616,11 @@ export class Session {
   protected storytellerGameNight() {
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    // 如果当前是小屋模式，切换回状态模式
+    if (this.state.listMode.value === ListMode.COTTAGE) {
+      this.storytellerListStatus();
+    }
 
     this.state.phase.set(Phase.NIGHT);
     this.internalPlayerToCottage();
@@ -762,6 +792,16 @@ export class Session {
     this.updatePlayerList();
   }
 
+  protected storytellerListCottage() {
+    // 小屋模式只在自由活动阶段可用
+    if (!this.phase(Phase.ROAMING, Phase.NIGHT)) return;
+
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.COTTAGE);
+    this.updatePlayerList();
+  }
+
   protected storytellerSelectStatus(userId: string) {
     if (this.state.listMode.value !== ListMode.STATUS) return;
 
@@ -930,6 +970,30 @@ export class Session {
   /**
    * 说书人可以更改玩家投票
    */
+  protected storytellerSelectCottage(userId: string) {
+    if (this.state.listMode.value !== ListMode.COTTAGE) return;
+
+    // 只有玩家有小屋
+    if (!this.internalHasPlayer(userId)) return;
+
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    // 检查说书人当前是否已经在这个玩家的小屋中
+    const storytellerChannelId = this.activeUsers.get(this.storytellerId);
+    if (storytellerChannelId) {
+      const currentCottageOwnerId = dynamicChannels.getStorytellerInCottage(storytellerChannelId);
+      if (currentCottageOwnerId === userId) {
+        // 说书人已经在这个玩家的小屋中，返回主频道
+        dynamicChannels.roamUserToMainChannel(this.storytellerId);
+        return;
+      }
+    }
+
+    // 说书人进入玩家的小屋
+    dynamicChannels.roamStorytellerToCottage(userId);
+  }
+
   protected storytellerSelectVoting(userId: string) {
     if (this.state.listMode.value !== ListMode.VOTING) return;
 
@@ -1053,7 +1117,8 @@ export class Session {
       dynamicChannels.roamUserToMainChannel(userId);
     } else if (location.isCottage) {
       if (userId == this.storytellerId) {
-        // TODO: 将玩家列表切换为小屋模式
+        // 说书人点击小屋按钮时切换到小屋模式
+        this.storytellerListCottage();
       } else {
         dynamicChannels.roamUserToCottage(userId);
       }
@@ -1098,6 +1163,11 @@ export class Session {
 
       // 更新禁言状态
       this.updateMuteState();
+
+      // 如果当前是小屋模式，更新玩家列表以反映说书人的位置变化
+      if (this.state.listMode.value === ListMode.COTTAGE) {
+        this.updatePlayerList();
+      }
 
       // 说书人不会加入游戏
       return;

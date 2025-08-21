@@ -1,6 +1,6 @@
 import { $card, Card } from '../utils/card';
 import { GAME } from '../../bot';
-import { ListMode, type ListPlayerItem } from '../session';
+import { ListMode, Phase, type ListPlayerItem } from '../session';
 import type { CValue, CArray } from '../utils/state';
 import type { ActionGroup } from '../../templates/types';
 import type { PlayersTemplateParams } from '../../templates/players';
@@ -9,6 +9,9 @@ import type { ButtonTheme } from '../../lib/api';
 interface Props {
   /** （说书人）列表模式 */
   listMode: CValue<ListMode>;
+
+  /** 当前游戏阶段 */
+  phase: CValue<Phase>;
 
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
@@ -65,7 +68,11 @@ class CardRenderer extends Card<Props> {
         groups.push([
           { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
           { text: '提名', theme: 'danger', value: '[st]ListNominate' },
-          { text: '上麦', theme: 'success', value: '[st]ListSpotlight' },
+          { text: '上麦', theme: 'info', value: '[st]ListSpotlight' },
+          // 小屋按钮只在自由活动阶段显示
+          state.phase.value === Phase.ROAMING || state.phase.value === Phase.NIGHT
+            ? { text: '小屋', theme: 'info', value: '[st]ListCottage' }
+            : { text: '　', theme: 'secondary' },
         ]);
         theme = 'secondary';
         action = { text: '切换', theme: 'info' };
@@ -120,7 +127,7 @@ class CardRenderer extends Card<Props> {
       case ListMode.SPOTLIGHT:
         status = '**(font)上麦模式(font)[success]**\n选择玩家单独发言';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
-        theme = 'success';
+        theme = 'info';
         action = { text: '上麦', theme: 'warning' };
         value = 'Spotlight';
         break;
@@ -164,6 +171,14 @@ class CardRenderer extends Card<Props> {
         theme = 'danger';
         action = { text: '选择', theme: 'info' };
         value = 'Nominate';
+        break;
+
+      case ListMode.COTTAGE:
+        status = '**(font)小屋模式(font)[warning]**\n点击玩家进入其小屋';
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        theme = 'info';
+        action = { text: '进入', theme: 'info' };
+        value = 'Cottage';
         break;
 
       case ListMode.VOTING:
@@ -267,6 +282,14 @@ class CardRenderer extends Card<Props> {
             action = 'none';
           } else if (selectedSet.has(item.id)) {
             action = { text: '提名者', theme: 'secondary' };
+          }
+          break;
+
+        case ListMode.COTTAGE:
+          if (item.type !== 'player') {
+            action = 'none';
+          } else if (selectedSet.has(item.id)) {
+            action = { text: '离开', theme: 'danger' };
           }
           break;
 

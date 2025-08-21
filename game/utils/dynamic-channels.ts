@@ -120,7 +120,7 @@ export class DynamicChannels {
   }
 
   /**
-   * 将用户移动到指定的小屋中，如果玩家没有小屋则不会移动
+   * 将说书人移动到指定玩家的小屋中，如果玩家没有小屋则不会移动
    *
    * 该方法限速，说书人如果被限速则不会移动
    */
@@ -133,7 +133,7 @@ export class DynamicChannels {
     if (!cottage) return;
 
     this.queue.push(async () => {
-      await BOT.api.channelMoveUser(this.mainChannel, [userId]);
+      await BOT.api.channelMoveUser(cottage, [this.storytellerId]);
       this.taskFinishTime = Date.now();
     });
   }
@@ -387,6 +387,29 @@ export class DynamicChannels {
 
       this.taskFinishTime = Date.now();
     });
+  }
+
+  /**
+   * 检查频道是否是某个玩家的小屋
+   * @param channelId 要检查的频道ID
+   * @returns 如果是小屋，返回小屋主人的用户ID，否则返回null
+   */
+  getCottageOwner(channelId: string): string | null {
+    for (const [ownerId, cottageChannelId] of this.cottages.entries()) {
+      if (cottageChannelId === channelId) {
+        return ownerId;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 检查说书人当前是否在某个玩家的小屋中
+   * @param storytellerChannelId 说书人当前所在的频道ID
+   * @returns 如果在小屋中，返回小屋主人的用户ID，否则返回null
+   */
+  getStorytellerInCottage(storytellerChannelId: string): string | null {
+    return this.getCottageOwner(storytellerChannelId);
   }
 
   /** 如果用户离开了小镇，可以删除他的小屋 */
