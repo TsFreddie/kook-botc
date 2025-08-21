@@ -480,6 +480,10 @@ export class Session {
     const joinedPlayers = new Set(this.register.getJoinedPlayers());
 
     const SEP = '　';
+    const mute = (userId: string) => {
+      const canSpeak = this.activeUsers.has(userId) && !this.shouldUserBeMuted(userId);
+      return canSpeak ? '🎙' : '🚫';
+    };
     const slot = (userId: string, text: string, color: string) => {
       return `(font)${text}(font)[${this.townsquareUsers.has(userId) ? color : 'tips'}]`;
     };
@@ -515,6 +519,7 @@ export class Session {
 
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
       const infoColumns = [
+        mute(p.id),
         slot(p.id, CIRCLED_NUMBERS[index + 1] || '⓪', 'success'),
         status(p),
         vote(p.vote),
@@ -609,6 +614,7 @@ export class Session {
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
     this.updateMuteState();
+    this.updatePlayerList();
 
     // 自动切换到小屋模式
     this.storytellerListCottage();
@@ -628,6 +634,7 @@ export class Session {
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.hideCottages();
     this.updateMuteState();
+    this.updatePlayerList();
   }
 
   protected storytellerGameRoaming() {
@@ -638,6 +645,7 @@ export class Session {
     this.renderer.dynamicChannels?.showLocations();
     this.renderer.dynamicChannels?.showCottages();
     this.updateMuteState();
+    this.updatePlayerList();
   }
 
   protected storytellerGameNight() {
@@ -649,6 +657,7 @@ export class Session {
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
     this.updateMuteState();
+    this.updatePlayerList();
 
     // 自动切换到小屋模式
     this.storytellerListCottage();
@@ -737,6 +746,8 @@ export class Session {
     // 从上麦状态退出时需要更新禁言状态
     if (previousListMode === ListMode.SPOTLIGHT) {
       this.updateMuteState();
+      this.updatePlayerList();
+      return;
     }
 
     // 从托梦状态退出时需要更新托梦卡片
@@ -774,6 +785,7 @@ export class Session {
     this.spectatorVoice = !this.spectatorVoice;
     this.state.listArg.set(this.spectatorVoice ? 1 : 0);
     this.updateMuteState();
+    this.updatePlayerList();
   }
 
   protected storytellerListKick() {
@@ -1204,11 +1216,7 @@ export class Session {
 
       // 更新禁言状态
       this.updateMuteState();
-
-      // 如果当前是小屋模式，更新玩家列表以反映说书人的位置变化
-      if (this.state.listMode.value === ListMode.COTTAGE) {
-        this.updatePlayerList();
-      }
+      this.updatePlayerList();
 
       // 说书人不会加入游戏
       return;
@@ -1216,6 +1224,7 @@ export class Session {
 
     // 更新禁言状态
     this.updateMuteState();
+    this.updatePlayerList();
 
     // 准备阶段加入语音的玩家会自动成为玩家
     if (this.isPreparing() && !this.internalHasPlayer(userId)) {
