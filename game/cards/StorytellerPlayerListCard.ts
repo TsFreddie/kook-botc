@@ -81,7 +81,12 @@ class CardRenderer extends Card<Props> {
 
       case ListMode.SWAP:
         status = '**(font)换座模式(font)[primary]**\n选择两名玩家交换座位';
-        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        groups.push([
+          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
+          { text: '打乱座位', theme: 'warning', value: '[st]ShufflePlayers' },
+        ]);
         theme = 'primary';
         action =
           state.listSelected.length > 0
@@ -148,6 +153,8 @@ class CardRenderer extends Card<Props> {
             : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
         groups.push([
           { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
           { text: '普通投票', theme: 'info', value: '[st]NormalVote' },
         ]);
         groups.push([

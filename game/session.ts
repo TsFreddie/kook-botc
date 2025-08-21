@@ -848,6 +848,20 @@ export class Session {
     this.updatePlayerList();
   }
 
+  protected storytellerShufflePlayers() {
+    if (this.state.listMode.value !== ListMode.SWAP) return;
+
+    // Fisher-Yates shuffle algorithm
+    for (let i = this.players.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.players[i], this.players[j]] = [this.players[j]!, this.players[i]!];
+    }
+
+    // Clear any current selection
+    this.listSelection.clear();
+    this.updatePlayerList();
+  }
+
   protected storytellerSelectSpectate(userId: string) {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
