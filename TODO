@@ -1,7 +1,0 @@
-- [x] Private message (托梦) system where storytellers message will be forwarded to townsquare text channel. If listPrivate mode is on, then it will send a temp_target_id message to that player.
-- [x] Make card mode more obvious, maybe change the title.
-- [ ] Player side player list
-- [ ] Voting system
-- [ ] Make player side card update not depend on list mode?
-- [ ] Reset should reset more stuff: list mode, private messages
-- [ ] Add more banners for roaming good and bad
