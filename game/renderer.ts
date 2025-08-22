@@ -18,6 +18,7 @@ import TownsquarePlayerListCard from './cards/TownsquarePlayerListCard';
 import MessagingCard from './cards/MessagingCard';
 import { townSquareGlobalCard, townSquarePrivateCardDefault } from '../templates/messaging';
 import { UserCard } from './utils/userCard';
+import { randomTownName } from './utils/names';
 
 export enum ChannelMode {
   Everyone = 0,
@@ -87,9 +88,7 @@ export class Renderer {
     private register: Register,
     private state: GameState,
   ) {
-    const townName = `小镇 ${Math.floor(Math.random() * 100000)
-      .toString()
-      .padStart(5, '0')}`;
+    const townName = randomTownName();
     this.name.set(townName);
     this.storytellerIdState.set(storytellerId);
 
