@@ -51,7 +51,7 @@ function generateSubInfo(scriptData: ScriptInput): string {
  * Generate description for social media metadata
  */
 function generateDescription(scriptData: ScriptInput): string {
-  const parts: string[] = [];
+  const parts: string[] = ['染・钟楼谜团剧本'];
 
   // Add author info
   if (scriptData.author) {
@@ -76,7 +76,7 @@ function generateDescription(scriptData: ScriptInput): string {
   }
 
   // Join with newlines, or provide fallback
-  return parts.length > 0 ? parts.join('\n') : '钟楼谜团剧本';
+  return parts.join('·');
 }
 
 /**
@@ -133,7 +133,7 @@ function generateHTML(
 
   // Find the first demon for social media icon, fallback to favicon
   const firstDemon = categorizedRoles.demon?.[0];
-  const socialIcon = firstDemon ? getRoleIconUrl(firstDemon) : '/favicons/favicon-32x32.png';
+  const socialIcon = firstDemon ? getRoleIconUrl(firstDemon) : '/favicons/icon.png';
   const socialIconAlt = firstDemon ? firstDemon.name : '钟楼谜团';
 
   // Generate description for social media
@@ -149,14 +149,14 @@ function generateHTML(
 
     <!-- Open Graph / Facebook -->
     <meta property="og:type" content="website">
-    <meta property="og:title" content="${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本">
+    <meta property="og:title" content="《${escapeHtml(scriptData.name)}》">
     <meta property="og:description" content="${escapeHtml(description)}">
     <meta property="og:image" content="${socialIcon}">
     <meta property="og:image:alt" content="${escapeHtml(socialIconAlt)}">
 
     <!-- Twitter -->
     <meta name="twitter:card" content="summary">
-    <meta name="twitter:title" content="${escapeHtml(scriptData.name)} - 染・钟楼谜团剧本">
+    <meta name="twitter:title" content="《${escapeHtml(scriptData.name)}》">
     <meta name="twitter:description" content="${escapeHtml(description)}">
     <meta name="twitter:image" content="${socialIcon}">
     <meta name="twitter:image:alt" content="${escapeHtml(socialIconAlt)}">
