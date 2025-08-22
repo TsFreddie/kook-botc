@@ -17,8 +17,7 @@ export const introCard = [
         elements: [
           {
             type: 'plain-text',
-            content:
-              '本服务器与钟小楼机器人与集石无任何关联，钟小楼机器人提供的游玩体验并非官方方式与渠道',
+            content: '钟小楼机器人与集石无任何关联，本机器人提供的游玩体验并非官方方式与渠道',
           },
         ],
       },
