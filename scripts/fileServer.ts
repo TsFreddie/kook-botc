@@ -99,7 +99,7 @@ export function createFileServer(options: FileServerOptions = {}): FileServerHan
   const {
     baseDir = '.',
     debug = false,
-    maxAge = 3600, // 1 hour default
+    maxAge = 0,
     enableETag = true,
   } = options;
 
@@ -164,7 +164,9 @@ export function createFileServer(options: FileServerOptions = {}): FileServerHan
         const mimeType = getMimeType(pathname);
         headers.set('Content-Type', mimeType);
         headers.set('Last-Modified', formatHttpDate(lastModified));
-        headers.set('Cache-Control', `public, max-age=${maxAge}`);
+        if (maxAge > 0) {
+          headers.set('Cache-Control', `public, max-age=${maxAge}`);
+        }
         
         if (etag) {
           headers.set('ETag', etag);
