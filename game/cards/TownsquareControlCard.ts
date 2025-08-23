@@ -17,7 +17,8 @@ class CardRenderer extends Card<Props> {
   render(state: Props) {
     let status: string = '';
     let mode: string = '';
-    let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
+    let icon =
+      state.phase.value === Phase.NIGHT || state.phase.value === Phase.COTTAGE ? '🌠' : '🌅';
     let image = GAME.assets['banner_day'];
 
     const groups: ActionGroup[] = [];
@@ -42,6 +43,11 @@ class CardRenderer extends Card<Props> {
         image = GAME.assets['banner_bad'];
         break;
       case Phase.NIGHT:
+        mode = `(font)夜晚阶段(font)[secondary]`;
+        status = '夜幕降临，似乎能感受到说书人的私语';
+        image = GAME.assets['banner_night'];
+        break;
+      case Phase.COTTAGE:
         mode = `(font)夜晚阶段(font)[secondary]`;
         status = '夜幕降临，你回到了自己的小屋';
         image = GAME.assets['banner_night'];

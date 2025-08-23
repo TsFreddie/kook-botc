@@ -68,6 +68,9 @@ export enum Phase {
   /** 夜晚阶段 */
   NIGHT,
 
+  /** 小屋阶段 */
+  COTTAGE,
+
   /** 白天阶段 */
   DAY,
 
@@ -621,7 +624,7 @@ export class Session {
   }
 
   protected storytellerGameDay() {
-    if (!this.phase(Phase.NIGHT, Phase.ROAMING)) return;
+    if (!this.phase(Phase.NIGHT, Phase.COTTAGE, Phase.ROAMING)) return;
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
     // 如果当前是小屋模式，切换回状态模式
@@ -653,6 +656,17 @@ export class Session {
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
     this.state.phase.set(Phase.NIGHT);
+    this.renderer.dynamicChannels?.hideLocations();
+    this.renderer.dynamicChannels?.hideCottages();
+    this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  protected storytellerGameCottage() {
+    if (!this.phase(Phase.NIGHT)) return;
+    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.phase.set(Phase.COTTAGE);
     this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
     this.renderer.dynamicChannels?.showCottages();
@@ -715,7 +729,7 @@ export class Session {
   protected storytellerForceVoiceChannel() {
     if (this.renderer.dynamicChannels?.isBusy()) return;
 
-    if (this.phase(Phase.NIGHT)) {
+    if (this.phase(Phase.COTTAGE)) {
       this.internalPlayerToCottage();
     } else {
       this.internalPlayerToTownsquare(true);
@@ -831,7 +845,7 @@ export class Session {
 
   protected storytellerListCottage() {
     // 小屋模式只在自由活动阶段可用
-    if (!this.phase(Phase.ROAMING, Phase.NIGHT)) return;
+    if (!this.phase(Phase.ROAMING, Phase.COTTAGE)) return;
 
     this.listSelection = new Set();
     this.state.listArg.set(0);

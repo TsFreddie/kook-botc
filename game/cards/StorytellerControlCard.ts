@@ -19,7 +19,8 @@ class CardRenderer extends Card<Props> {
   render(state: Props) {
     let status: string = '';
     let mode: string = '';
-    let icon = state.phase.value === Phase.NIGHT ? '🌠' : '🌅';
+    let icon =
+      state.phase.value === Phase.NIGHT || state.phase.value === Phase.COTTAGE ? '🌠' : '🌅';
     let image = GAME.assets['banner_day'];
 
     const groups: ActionGroup[] = [];
@@ -63,7 +64,19 @@ class CardRenderer extends Card<Props> {
       case Phase.NIGHT:
         mode = `(font)夜晚阶段(font)[secondary]`;
         status =
-          '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)使用托梦功能为镇民提供信息，亦可前往小屋与镇民语音(font)[warning]';
+          '城镇广场空无一人\n(font)使用托梦功能提供信息，或将玩家送往小屋以使用语音(font)[warning]';
+        image = GAME.assets['banner_night'];
+        groups.push([
+          { text: '🌅 黎明', theme: 'info', value: '[st]GameDay' },
+          { text: '送往小屋', theme: 'success', value: '[st]GameCottage' },
+          { text: '好人胜利', theme: 'info', value: '[st]GameRestart|good' },
+          { text: '坏人胜利', theme: 'danger', value: '[st]GameRestart|bad' },
+        ]);
+        break;
+      case Phase.COTTAGE:
+        mode = `(font)夜晚阶段(font)[secondary]`;
+        status =
+          '城镇广场空无一人，镇民回到各自小屋睡觉了\n(font)可以前往玩家小屋与玩家私聊，托梦功能仍然可用(font)[warning]';
         image = GAME.assets['banner_night'];
         groups.push([
           { text: '🌅 黎明', theme: 'info', value: '[st]GameDay' },
