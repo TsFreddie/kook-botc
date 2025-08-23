@@ -197,7 +197,7 @@ class CardRenderer extends Card<Props> {
           { text: '　', theme: 'secondary' },
           started
             ? { text: '重新开始', theme: 'danger', value: '[st]StopVoting' }
-            : { text: '开始投票', theme: 'info', value: `[st]StartVoting` },
+            : { text: '开始统计', theme: 'info', value: `[st]StartVoting` },
         ]);
         groups.push([
           { text: '　', theme: 'secondary' },
