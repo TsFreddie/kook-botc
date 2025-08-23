@@ -1517,10 +1517,14 @@ export class KookApiClient {
    * Move users between voice channels
    */
   async channelMoveUser(targetChannelId: string, userIds: string[]): Promise<void> {
-    await this.makeRequest('/channel/move-user', 'POST', {
-      target_id: targetChannelId,
-      user_ids: userIds,
-    });
+    try {
+      await this.makeRequest('/channel/move-user', 'POST', {
+        target_id: targetChannelId,
+        user_ids: userIds,
+      });
+    } catch {
+      // ignore
+    }
   }
 
   /**
@@ -1852,8 +1856,14 @@ export class KookApiClient {
   /**
    * Get thread category list
    */
-  async threadCategoryList(params: GetThreadCategoryListParams): Promise<ThreadCategoryListResponse> {
-    const response = await this.makeRequest<ThreadCategoryListResponse>('/category/list', 'GET', params);
+  async threadCategoryList(
+    params: GetThreadCategoryListParams,
+  ): Promise<ThreadCategoryListResponse> {
+    const response = await this.makeRequest<ThreadCategoryListResponse>(
+      '/category/list',
+      'GET',
+      params,
+    );
     return response.data;
   }
 
