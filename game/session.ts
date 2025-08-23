@@ -613,14 +613,10 @@ export class Session {
 
     // 进入夜晚阶段
     this.state.phase.set(Phase.NIGHT);
-    this.internalPlayerToCottage();
     this.renderer.dynamicChannels?.hideLocations();
-    this.renderer.dynamicChannels?.showCottages();
+    this.renderer.dynamicChannels?.hideCottages();
     this.updateMuteState();
     this.updatePlayerList();
-
-    // 自动切换到小屋模式
-    this.storytellerListCottage();
   }
 
   protected storytellerGameDay() {
