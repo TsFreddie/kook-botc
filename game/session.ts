@@ -625,11 +625,11 @@ export class Session {
 
   protected async storytellerGameDay() {
     if (this.state.busy.value) return;
-    if (!this.phase(Phase.NIGHT, Phase.COTTAGE, Phase.ROAMING)) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);
+
+    if (!this.phase(Phase.NIGHT, Phase.COTTAGE, Phase.ROAMING)) return;
 
     // 如果当前是小屋模式，切换回状态模式
     if (this.state.listMode.value === ListMode.COTTAGE) {
@@ -646,11 +646,11 @@ export class Session {
 
   protected async storytellerGameRoaming() {
     if (this.state.busy.value) return;
-    if (!this.phase(Phase.DAY)) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);
+
+    if (!this.phase(Phase.DAY)) return;
 
     this.state.phase.set(Phase.ROAMING);
     this.renderer.dynamicChannels?.showLocations();
@@ -661,11 +661,11 @@ export class Session {
 
   protected async storytellerGameNight() {
     if (this.state.busy.value) return;
-    if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);
+
+    if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
 
     this.state.phase.set(Phase.NIGHT);
     this.renderer.dynamicChannels?.hideLocations();
@@ -676,11 +676,11 @@ export class Session {
 
   protected async storytellerGameCottage() {
     if (this.state.busy.value) return;
-    if (!this.phase(Phase.NIGHT)) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);
+
+    if (!this.phase(Phase.NIGHT)) return;
 
     this.state.phase.set(Phase.COTTAGE);
     this.internalPlayerToCottage();
@@ -695,13 +695,12 @@ export class Session {
 
   protected async storytellerGameRestart(winner?: 'good' | 'bad') {
     if (this.state.busy.value) return;
-
-    // 初始化过程中不可重置游戏状态
-    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING)) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);
+
+    // 初始化过程中不可重置游戏状态
+    if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING)) return;
 
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
@@ -749,7 +748,6 @@ export class Session {
 
   protected async storytellerForceVoiceChannel() {
     if (this.state.busy.value) return;
-
     this.state.busy.set(true);
     await this.renderer.dynamicChannels?.wait();
     this.state.busy.set(false);

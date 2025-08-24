@@ -115,6 +115,13 @@ class CardRenderer extends Card<Props> {
 
     if (state.busy.value) {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}（操作中，请耐心等待...）`;
+      groups.map((group) => {
+        group.map((button) => ({
+          text: button.text,
+          theme: 'secondary',
+          value: button.value,
+        }));
+      });
     } else {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}`;
     }
