@@ -173,6 +173,9 @@ BOT.onMessageBtnClick(async (event) => {
     const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
     if (!session) return;
 
+    // 检查会话是否被锁定
+    if (session.isLocked) return;
+
     const { actionName, args } = parseButtonValue(value, '[st]');
     const handlerName = 'storyteller' + actionName;
     const handler = (session as any)[handlerName];
@@ -186,6 +189,9 @@ BOT.onMessageBtnClick(async (event) => {
     // 玩家操作，必须玩家在会话中才能操作
     const userSession = ROUTER.getSessionByUserId(event.extra.body.user_id);
     if (!userSession) return;
+
+    // 检查会话是否被锁定
+    if (userSession.isLocked) return;
 
     // 只有在玩家所在的频道才能响应
     const channelSession = ROUTER.getSessionByChannelId(event.extra.body.target_id);
@@ -210,6 +216,10 @@ BOT.onMessageBtnClick(async (event) => {
     // 位置移动
     const userSession = ROUTER.getSessionByUserId(event.extra.body.user_id);
     if (!userSession) return;
+
+    // 检查会话是否被锁定
+    if (userSession.isLocked) return;
+
     const channelSession = ROUTER.getSessionByChannelId(event.extra.body.target_id);
 
     // 只有在玩家所在的频道才能移动
@@ -227,6 +237,9 @@ BOT.onMessageBtnClick(async (event) => {
     // 只要能访问就能按
     const session = ROUTER.getSessionByChannelId(event.extra.body.target_id);
     if (!session) return;
+
+    // 检查会话是否被锁定
+    if (session.isLocked) return;
 
     const [action, userId] = value.slice(4).split('|');
     if (!action || !userId) return;

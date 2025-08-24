@@ -108,6 +108,8 @@ export enum ListMode {
   COTTAGE,
   /** 正在投票 */
   VOTING,
+  /** 换说书人 */
+  TRANSFER,
 }
 
 export interface ListPlayerItem {
@@ -262,6 +264,11 @@ export class Session {
   private sessionIdleTimer?: NodeJS.Timeout;
 
   /**
+   * 会话锁定状态，锁定时不处理任何交互
+   */
+  private locked = false;
+
+  /**
    * 当前是否为指定状态
    * @param phases 查询的状态
    * @returns true 如果为任意一个指定状态
@@ -271,6 +278,21 @@ export class Session {
       if (this.state.phase.value == phase) return true;
     }
     return false;
+  }
+
+  /**
+   * 获取会话锁定状态
+   */
+  get isLocked() {
+    return this.locked;
+  }
+
+  /**
+   * 解锁会话
+   */
+  unlock() {
+    this.locked = false;
+    this.state.busy.set(false);
   }
 
   /**
@@ -912,6 +934,13 @@ export class Session {
     this.updatePlayerList();
   }
 
+  protected storytellerListTransfer() {
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.TRANSFER);
+    this.updatePlayerList();
+  }
+
   protected storytellerSelectStatus(userId: string) {
     if (this.state.listMode.value !== ListMode.STATUS) return;
 
@@ -1118,6 +1147,25 @@ export class Session {
 
     // 说书人进入玩家的小屋
     dynamicChannels.roamStorytellerToCottage(userId);
+  }
+
+  protected async storytellerSelectTransfer(userId: string) {
+    if (this.state.busy.value) return;
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
+
+    if (this.state.listMode.value !== ListMode.TRANSFER) return;
+
+    // 不能转移给自己
+    if (userId === this.storytellerId) return;
+
+    // 锁定会话，防止其他操作
+    this.locked = true;
+    this.state.busy.set(true);
+
+    // 通知路由器创建新会话并转移用户
+    this.register.transferSession(userId, this.activeUsers);
   }
 
   protected storytellerSelectVoting(userId: string) {

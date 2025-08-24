@@ -211,6 +211,14 @@ class CardRenderer extends Card<Props> {
         theme = 'primary';
         value = 'Voting';
         break;
+
+      case ListMode.TRANSFER:
+        status = '**(font)换说书人(font)[warning]**\n点击选择新的说书人，该功能会创建新的房间';
+        groups.push([{ text: '取消', theme: 'danger', value: '[st]ListStatus' }]);
+        theme = 'warning';
+        action = { text: '转移', theme: 'warning' };
+        value = 'Transfer';
+        break;
     }
 
     // 确保所有按钮组都是4个
@@ -306,6 +314,12 @@ class CardRenderer extends Card<Props> {
         case ListMode.VOTING:
           if (selectedSet.has(item.id)) {
             action = { text: '切换', theme: 'info' };
+          }
+          break;
+
+        case ListMode.TRANSFER:
+          if (item.type === 'storyteller') {
+            action = 'none';
           }
           break;
       }

@@ -9,6 +9,7 @@ export interface Register {
   getJoinedPlayers: () => string[];
   kick: (userId: string) => void;
   destroy: () => void;
+  transferSession: (newStorytellerId: string, activeUsers: Map<string, string>) => void;
 }
 
 interface SessionData {
@@ -83,6 +84,9 @@ export class Router {
       },
       kick: (user) => {
         this.kick(user, session);
+      },
+      transferSession: (newStorytellerId, activeUsers) => {
+        this.handleTransferSession(session, newStorytellerId, activeUsers);
       },
     });
 
@@ -256,7 +260,47 @@ export class Router {
     const channelSession = this.getSessionByChannelId(channel);
     if (userSession !== channelSession) return;
 
+    // 说书人不能离开
+    if (user === userSession.storytellerId) return;
+
     this.kick(user, userSession);
+  }
+
+  /**
+   * 处理说书人转移
+   */
+  private async handleTransferSession(
+    oldSession: Session,
+    newStorytellerId: string,
+    activeUsers: Map<string, string>,
+  ) {
+    // 将所有人移出游戏（但是不踢出语音）
+    const sessionInfo = this.sessions.get(oldSession);
+    if (!sessionInfo) return;
+
+    for (const userId of sessionInfo.users) {
+      this.removeUserFromSession(oldSession, userId);
+    }
+
+    // 为新说书人创建新会话
+    const result = await this.createSession(newStorytellerId);
+    if (!result) return;
+
+    const { session: newSession } = result;
+
+    // 移动所有活跃用户到新的主语音频道
+    const newMainChannelId = newSession.renderer.voiceChannelId;
+    const usersToMove = Array.from(activeUsers.keys());
+
+    for (const userId of usersToMove) {
+      try {
+        await BOT.api.channelMoveUser(newMainChannelId, [userId]);
+      } catch {
+        // 无视移动用户报错
+      }
+    }
+
+    oldSession.destroy();
   }
 
   /**

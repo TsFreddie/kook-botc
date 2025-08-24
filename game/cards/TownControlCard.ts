@@ -59,6 +59,16 @@ class CardRenderer extends Card<Props> {
                 },
                 {
                   type: 'button',
+                  theme: 'warning',
+                  text: {
+                    type: 'plain-text',
+                    content: '换说书人',
+                  },
+                  click: 'return-val',
+                  value: '[st]ListTransfer',
+                },
+                {
+                  type: 'button',
                   theme: 'danger',
                   text: {
                     type: 'plain-text',
