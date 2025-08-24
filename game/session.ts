@@ -1084,9 +1084,6 @@ export class Session {
   protected storytellerSelectNominate(userId: string) {
     if (this.state.listMode.value !== ListMode.NOMINATE) return;
 
-    // 只有玩家可以被提名
-    if (!this.internalHasPlayer(userId)) return;
-
     // 无选择，选中
     if (this.listSelection.size == 0) {
       this.listSelection.add(userId);

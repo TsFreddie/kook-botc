@@ -296,9 +296,7 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.NOMINATE:
-          if (item.type !== 'player') {
-            action = 'none';
-          } else if (selectedSet.has(item.id)) {
+          if (selectedSet.has(item.id)) {
             action = { text: '提名者', theme: 'secondary' };
           }
           break;
