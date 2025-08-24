@@ -154,21 +154,12 @@ function generateErrorHTML(title: string, message: string): string {
           a { color: #007bff; text-decoration: none; }
           a:hover { text-decoration: underline; }
 
-          @media (prefers-color-scheme: dark) {
-            body {
-              background-color: #1a1a1a;
-              color: #e0e0e0;
-            }
-            h1 { color: #ff6b6b; }
-            a { color: #4da6ff; }
+          body.dark {
+            background-color: #1a1a1a;
+            color: #e0e0e0;
           }
-
-          body.revert {
-            background-color: white;
-            color: black;
-          }
-          body.revert h1 { color: #f44336; }
-          body.revert a { color: #007bff; }
+          body.dark h1 { color: #ff6b6b; }
+          body.dark a { color: #4da6ff; }
         </style>
       </head>
       <body>
@@ -210,6 +201,64 @@ const server = Bun.serve({
     // API endpoint for storing scripts
     '/api/store': {
       POST: handleStoreScript,
+    },
+
+    // Travellers listing page
+    '/travellers': async (req) => {
+      try {
+        // Check if client has current version
+        if (await checkNotModified(req)) {
+          return new Response(null, { status: 304 });
+        }
+
+        // Load all traveller roles from data.json
+        const data = await import('./data.json');
+        const travellerRoles = data.default.filter((role: any) => role.team === 'traveller');
+
+        // Create a script data with all travellers
+        const scriptData = {
+          name: '旅行者列表',
+          roles: travellerRoles.map((role: any) => role.id),
+        };
+
+        const html = generateScriptHTML(scriptData);
+        const headers = await createScriptViewerHeaders();
+        return new Response(html, { headers });
+      } catch (error: any) {
+        return new Response(generateErrorHTML('错误', `生成旅行者列表时出错：${error.message}`), {
+          status: 500,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
+    },
+
+    // Fabled listing page
+    '/fabled': async (req) => {
+      try {
+        // Check if client has current version
+        if (await checkNotModified(req)) {
+          return new Response(null, { status: 304 });
+        }
+
+        // Load all fabled roles from data.json
+        const data = await import('./data.json');
+        const fabledRoles = data.default.filter((role: any) => role.team === 'fabled');
+
+        // Create a script data with all fabled
+        const scriptData = {
+          name: '传奇角色列表',
+          roles: fabledRoles.map((role: any) => role.id),
+        };
+
+        const html = generateScriptHTML(scriptData);
+        const headers = await createScriptViewerHeaders();
+        return new Response(html, { headers });
+      } catch (error: any) {
+        return new Response(generateErrorHTML('错误', `生成传奇列表时出错：${error.message}`), {
+          status: 500,
+          headers: { 'Content-Type': 'text/html' },
+        });
+      }
     },
 
     // Home page with caching

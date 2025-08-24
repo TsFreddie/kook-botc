@@ -11,7 +11,7 @@ export interface Role extends BaseRole {
 export interface CustomRole {
   id: string;
   name: string;
-  team: 'townsfolk' | 'outsider' | 'minion' | 'demon' | 'traveler' | 'fabled';
+  team: 'townsfolk' | 'outsider' | 'minion' | 'demon' | 'traveler' | 'traveller' | 'fabled';
   ability: string;
   image?: string;
 }
@@ -52,14 +52,18 @@ const normalizeId = (id: string) => {
 
 // Type guard functions
 function isCustomRole(role: RoleInput): role is CustomRole {
-  return typeof role === 'object' && role !== null && 'name' in role && 'team' in role && 'ability' in role;
+  return (
+    typeof role === 'object' &&
+    role !== null &&
+    'name' in role &&
+    'team' in role &&
+    'ability' in role
+  );
 }
 
 function isStringRole(role: RoleInput): role is string {
   return typeof role === 'string';
 }
-
-
 
 /**
  * Validate input types for script data
@@ -137,7 +141,11 @@ function validateInputTypes(scriptData: any): void {
       if (typeof role.team !== 'string') {
         throw new Error(`自定义角色[${i}]的team必须是字符串类型`);
       }
-      if (!['townsfolk', 'outsider', 'minion', 'demon', 'traveler', 'traveller', 'fabled'].includes(role.team)) {
+      if (
+        !['townsfolk', 'outsider', 'minion', 'demon', 'traveler', 'traveller', 'fabled'].includes(
+          role.team,
+        )
+      ) {
         throw new Error(`自定义角色[${i}]的team必须是有效的阵营类型`);
       }
       if (typeof role.ability !== 'string') {
@@ -194,6 +202,10 @@ export function validateAndSeparateScript(scriptData: ScriptInput): ValidatedScr
         ability: normalizedRole.ability,
         image: normalizedRole.image || 'none', // Store 'none' if no image provided
       };
+      // Normalize traveller team
+      if (customRole.team === 'traveler') {
+        customRole.team = 'traveller';
+      }
       resolvedRoles.push(customRole);
     } else {
       // Handle existing role by ID
