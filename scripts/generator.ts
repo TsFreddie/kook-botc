@@ -166,6 +166,9 @@ function generateHTML(
     <link rel="icon" type="image/png" sizes="32x32" href="/favicons/favicon-32x32.png">
     <link rel="icon" type="image/png" sizes="16x16" href="/favicons/favicon-16x16.png">
     <link rel="manifest" href="/favicons/site.webmanifest">
+
+    <!-- html2canvas library -->
+    <script src="/js/html2canvas.js"></script>
     <style>
         hr {
           opacity: 0.5;
@@ -201,6 +204,13 @@ function generateHTML(
         .role {
             display: flex;
             gap: 0.5em;
+            cursor: pointer;
+            padding: 0.25em;
+            border-radius: 4px;
+            transition: background-color 0.2s ease;
+        }
+        .role:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
         .role-icon {
             margin-top: 0.5em;
@@ -333,6 +343,9 @@ function generateHTML(
             hr {
                 border-color: #444;
             }
+            .role:hover {
+                background-color: rgba(255, 255, 255, 0.1);
+            }
             .theme-toggle, .download-btn {
                 background: #333;
                 color: #e0e0e0;
@@ -357,6 +370,9 @@ function generateHTML(
         }
         body.revert hr {
             border-color: #ccc;
+        }
+        body.revert .role:hover {
+            background-color: rgba(0, 0, 0, 0.05);
         }
         body.revert .theme-toggle, body.revert .download-btn {
             background: #f0f0f0;
@@ -437,7 +453,7 @@ function generateHTML(
       const roleClass = role.team === 'townsfolk' || role.team === 'outsider' ? 'blue' : 'red';
 
       html += `
-        <div class="role">`;
+        <div class="role" onclick="captureRoleToClipboard(this)" title="点击复制角色卡片到剪贴板">`;
 
       // Role icon using custom icon tag - only render if image is not 'none'
       if (role.image !== 'none') {
@@ -467,6 +483,89 @@ function generateHTML(
     </div>
 
     <script>
+        // Function to capture role element and copy to clipboard
+        async function captureRoleToClipboard(roleElement) {
+            try {
+                // Create a temporary container with the role content
+                const tempContainer = document.createElement('div');
+                tempContainer.style.position = 'absolute';
+                tempContainer.style.left = '-9999px';
+                tempContainer.style.top = '-9999px';
+                tempContainer.style.width = '480px';
+                tempContainer.style.padding = '8px';
+                tempContainer.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
+                tempContainer.style.color = getComputedStyle(document.body).color;
+                tempContainer.style.fontFamily = getComputedStyle(document.body).fontFamily;
+
+                // Clone the role element
+                const clonedRole = roleElement.cloneNode(true);
+                clonedRole.style.cursor = 'default';
+                clonedRole.removeAttribute('onclick');
+                clonedRole.removeAttribute('title');
+
+                tempContainer.appendChild(clonedRole);
+                document.body.appendChild(tempContainer);
+
+                // Use html2canvas to capture the element
+                const canvas = await html2canvas(tempContainer, {
+                    backgroundColor: getComputedStyle(document.body).backgroundColor,
+                    scale: 2, // Higher resolution
+                    useCORS: true,
+                    allowTaint: true
+                });
+
+                // Remove temporary container
+                document.body.removeChild(tempContainer);
+
+                // Convert canvas to blob
+                canvas.toBlob(async (blob) => {
+                    try {
+                        // Copy to clipboard using the Clipboard API
+                        await navigator.clipboard.write([
+                            new ClipboardItem({
+                                'image/png': blob
+                            })
+                        ]);
+
+                        // Show success feedback
+                        showCopyFeedback(roleElement, true);
+                    } catch (clipboardError) {
+                        console.error('Failed to copy to clipboard:', clipboardError);
+                        showCopyFeedback(roleElement, false);
+                    }
+                }, 'image/png');
+
+            } catch (error) {
+                console.error('Failed to capture role:', error);
+                showCopyFeedback(roleElement, false);
+            }
+        }
+
+        // Function to show copy feedback
+        function showCopyFeedback(element, success) {
+            const feedback = document.createElement('div');
+            feedback.textContent = success ? '已复制到剪贴板!' : '复制失败';
+            feedback.style.position = 'fixed';
+            feedback.style.top = '20px';
+            feedback.style.right = '20px';
+            feedback.style.padding = '8px 16px';
+            feedback.style.backgroundColor = success ? '#4CAF50' : '#f44336';
+            feedback.style.color = 'white';
+            feedback.style.borderRadius = '4px';
+            feedback.style.zIndex = '10000';
+            feedback.style.fontSize = '14px';
+            feedback.style.boxShadow = '0 2px 8px rgba(0,0,0,0.2)';
+
+            document.body.appendChild(feedback);
+
+            // Remove feedback after 2 seconds
+            setTimeout(() => {
+                if (feedback.parentNode) {
+                    document.body.removeChild(feedback);
+                }
+            }, 2000);
+        }
+
         function downloadPage() {
             // Clone the entire document
             const clonedDoc = document.cloneNode(true);
@@ -476,6 +575,20 @@ function generateHTML(
             if (downloadBtn) {
                 downloadBtn.remove();
             }
+
+            // Remove html2canvas script from the cloned document
+            const html2canvasScript = clonedDoc.querySelector('script[src="/js/html2canvas.js"]');
+            if (html2canvasScript) {
+                html2canvasScript.remove();
+            }
+
+            // Remove onclick handlers and titles from role elements
+            const roleElements = clonedDoc.querySelectorAll('.role[onclick]');
+            roleElements.forEach(role => {
+                role.removeAttribute('onclick');
+                role.removeAttribute('title');
+                role.style.cursor = 'default';
+            });
 
             // Get the HTML content
             const htmlContent = '<!DOCTYPE html>\\n' + clonedDoc.documentElement.outerHTML;
