@@ -24,7 +24,7 @@ class CardRenderer extends Card<Props> {
       state.phase.value === Phase.NIGHT || state.phase.value === Phase.COTTAGE ? '🌠' : '🌅';
     let image = GAME.assets['banner_day'];
 
-    const groups: ActionGroup[] = [];
+    let groups: ActionGroup[] = [];
 
     switch (state.phase.value) {
       case Phase.WAITING_FOR_STORYTELLER:
@@ -115,9 +115,9 @@ class CardRenderer extends Card<Props> {
 
     if (state.busy.value) {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}（操作中，请耐心等待...）`;
-      groups.forEach((group) => {
-        group.forEach((button) => (button.theme = 'secondary'));
-      });
+      groups = groups.map((group) =>
+        group.map((button) => ({ ...button, theme: 'secondary' })),
+      ) as ActionGroup[];
     } else {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}`;
     }
