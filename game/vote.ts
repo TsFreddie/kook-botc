@@ -55,7 +55,7 @@ export class VoteManager {
     )?.id;
 
     let requiredVotes = Math.ceil(
-      this.players.filter((p) => p.status === PlayerStatus.ALIVE).length / 0,
+      this.players.filter((p) => p.status === PlayerStatus.ALIVE).length / 2,
     );
 
     if (isNaN(requiredVotes) || !isFinite(requiredVotes)) {
