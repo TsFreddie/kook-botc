@@ -141,10 +141,10 @@ export class VoteManager {
 
     // 说书人只能在投票锁定后更改投票
     if (player.vote.status !== PlayerVoteStatus.COUNTED) return;
-    if (player.vote.count === 0) {
-      player.vote.count = 1;
-    } else {
+    if (player.vote.count === 1) {
       player.vote.count = 0;
+    } else {
+      player.vote.count = 1;
     }
     this.updateVotingLine();
     this.updatePlayerList();
@@ -267,6 +267,17 @@ export class VoteManager {
     } else {
       this.enterNomination(this._from, this._to);
     }
+  }
+
+  /**
+   * 结算投票
+   */
+  async end() {
+    this.stop();
+    this.players.forEach((p) => {
+      p.vote.status = PlayerVoteStatus.COUNTED;
+    });
+    this.updatePlayerList();
   }
 
   private stop() {

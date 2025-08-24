@@ -49,17 +49,15 @@ class CardRenderer extends Card<Props> {
 
       // 根据 listArg 决定投票按钮
       if (state.listArg.value === 1) {
-        // 三个按钮：不投票，投票，投两票
         groups.push([
-          { text: '不投票', theme: 'secondary', value: '[pl]VoteNone' },
-          { text: '投票', theme: 'primary', value: '[pl]VoteOne' },
-          { text: '投两票', theme: 'info', value: '[pl]VoteTwo' },
+          { text: '放下手', theme: 'secondary', value: '[pl]VoteNone' },
+          { text: '举手', theme: 'primary', value: '[pl]VoteOne' },
+          { text: '举双手', theme: 'info', value: '[pl]VoteTwo' },
         ]);
       } else {
-        // 两个按钮：不投票，投票
         groups.push([
-          { text: '不投票', theme: 'secondary', value: '[pl]VoteNone' },
-          { text: '投票', theme: 'primary', value: '[pl]VoteOne' },
+          { text: '放下手', theme: 'secondary', value: '[pl]VoteNone' },
+          { text: '举手', theme: 'primary', value: '[pl]VoteOne' },
         ]);
       }
       theme = 'primary';

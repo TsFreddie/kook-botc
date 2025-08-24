@@ -10,6 +10,7 @@ interface Props {
   invite: CValue<string>;
   phase: CValue<Phase>;
   storytellerId: CValue<string>;
+  busy: CValue<boolean>;
 }
 
 /**
@@ -110,10 +111,18 @@ class CardRenderer extends Card<Props> {
         break;
     }
 
+    let header;
+
+    if (state.busy.value) {
+      header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}（操作中，请耐心等待...）`;
+    } else {
+      header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}`;
+    }
+
     return {
       content: JSON.stringify({
         image,
-        status: `**(font)${icon} 说书人控制台(font)[warning]** ${mode}\n${status}`,
+        status: `${header}\n${status}`,
         groups: groups,
       }),
       template_id: GAME.templates.storyteller,

@@ -11,7 +11,7 @@ export class DynamicChannels {
   private cottages = new Map<string, string>();
   private createdChannels = new Set<string>();
   private queue: SequentialQueue = new SequentialQueue();
-  private playerThrottleTimer = new Map<string, NodeJS.Timeout>();
+  private playerThrottleTimer = new Map<string, { time: number; timer: NodeJS.Timeout }>();
   private destroyed = false;
   private taskFinishTime = 0;
 
@@ -32,24 +32,30 @@ export class DynamicChannels {
   throttle(userId: string) {
     const timer = this.playerThrottleTimer.get(userId);
     if (timer) {
-      clearTimeout(timer);
+      clearTimeout(timer.timer);
     }
 
-    this.playerThrottleTimer.set(
-      userId,
-      setTimeout(() => {
+    this.playerThrottleTimer.set(userId, {
+      time: Date.now() + 1500,
+      timer: setTimeout(() => {
         this.playerThrottleTimer.delete(userId);
       }, 1500),
-    );
+    });
   }
 
-  /** 动态语音系统是否正忙，如果正忙不推荐游戏进行状态转换 */
-  isBusy() {
-    return (
-      this.queue.size() > 0 ||
-      this.playerThrottleTimer.size > 0 ||
-      this.taskFinishTime + 1500 > Date.now()
-    );
+  /** 等待 */
+  wait() {
+    return this.queue.push(() => {
+      if (this.playerThrottleTimer.size > 0 || this.taskFinishTime + 1500 > Date.now()) {
+        const now = Date.now();
+        const waitTime = Math.max(
+          ...this.playerThrottleTimer.values().map((t) => t.time - now),
+          this.taskFinishTime + 1500 - now,
+        );
+        return new Promise((resolve) => setTimeout(resolve, waitTime));
+      }
+      return Promise.resolve();
+    });
   }
 
   kickUserFromChannel(userId: string, channelId: string) {

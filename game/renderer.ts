@@ -116,6 +116,7 @@ export class Renderer {
           invite: this.invite,
           phase: this.state.phase,
           storytellerId: this.storytellerIdState,
+          busy: this.state.busy,
         }),
         StorytellerPlayerListCard({
           listMode: this.state.listMode,

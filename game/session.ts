@@ -128,6 +128,9 @@ export interface GameState {
   /** （城镇广场）是否为投票模式 */
   voting: CValue<boolean>;
 
+  /** （说书人）卡片是是否为忙 */
+  busy: CValue<boolean>;
+
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
 
@@ -197,6 +200,7 @@ export class Session {
     storytellerCardTheme: $state('secondary'),
     storytellerCards: $array([]),
     townsquareCards: $array([]),
+    busy: $state(false),
   };
 
   private readonly players: PlayerState[] = [];
@@ -608,7 +612,7 @@ export class Session {
     }
   }
 
-  protected storytellerGameStart() {
+  protected async storytellerGameStart() {
     if (!this.phase(Phase.PREPARING, Phase.FINISH_GOOD, Phase.FINISH_BAD)) return;
 
     // 进入夜晚阶段
@@ -619,9 +623,13 @@ export class Session {
     this.updatePlayerList();
   }
 
-  protected storytellerGameDay() {
+  protected async storytellerGameDay() {
+    if (this.state.busy.value) return;
     if (!this.phase(Phase.NIGHT, Phase.COTTAGE, Phase.ROAMING)) return;
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     // 如果当前是小屋模式，切换回状态模式
     if (this.state.listMode.value === ListMode.COTTAGE) {
@@ -636,9 +644,13 @@ export class Session {
     this.updatePlayerList();
   }
 
-  protected storytellerGameRoaming() {
+  protected async storytellerGameRoaming() {
+    if (this.state.busy.value) return;
     if (!this.phase(Phase.DAY)) return;
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     this.state.phase.set(Phase.ROAMING);
     this.renderer.dynamicChannels?.showLocations();
@@ -647,9 +659,13 @@ export class Session {
     this.updatePlayerList();
   }
 
-  protected storytellerGameNight() {
+  protected async storytellerGameNight() {
+    if (this.state.busy.value) return;
     if (!this.phase(Phase.DAY, Phase.ROAMING)) return;
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     this.state.phase.set(Phase.NIGHT);
     this.renderer.dynamicChannels?.hideLocations();
@@ -658,9 +674,13 @@ export class Session {
     this.updatePlayerList();
   }
 
-  protected storytellerGameCottage() {
+  protected async storytellerGameCottage() {
+    if (this.state.busy.value) return;
     if (!this.phase(Phase.NIGHT)) return;
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     this.state.phase.set(Phase.COTTAGE);
     this.internalPlayerToCottage();
@@ -673,10 +693,15 @@ export class Session {
     this.storytellerListCottage();
   }
 
-  protected storytellerGameRestart(winner?: 'good' | 'bad') {
+  protected async storytellerGameRestart(winner?: 'good' | 'bad') {
+    if (this.state.busy.value) return;
+
     // 初始化过程中不可重置游戏状态
     if (this.phase(Phase.WAITING_FOR_STORYTELLER, Phase.INITIALIZING)) return;
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     // 如果重新开始时玩家没有游玩权限，则直接移除
     for (let i = this.players.length - 1; i >= 0; i--) {
@@ -722,8 +747,12 @@ export class Session {
     this.renderer.userCard.reset();
   }
 
-  protected storytellerForceVoiceChannel() {
-    if (this.renderer.dynamicChannels?.isBusy()) return;
+  protected async storytellerForceVoiceChannel() {
+    if (this.state.busy.value) return;
+
+    this.state.busy.set(true);
+    await this.renderer.dynamicChannels?.wait();
+    this.state.busy.set(false);
 
     if (this.phase(Phase.COTTAGE)) {
       this.internalPlayerToCottage();
@@ -1090,6 +1119,14 @@ export class Session {
   protected storytellerStopVoting() {
     if (this.state.listMode.value !== ListMode.VOTING) return;
     this.vote.reset();
+  }
+
+  /**
+   * 停止投票（不会退出投票状态，结算当前投票，方便提前结束）
+   */
+  protected storytellerEndVoting() {
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.end();
   }
 
   protected storytellerVoteAdd() {
