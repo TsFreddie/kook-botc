@@ -141,13 +141,6 @@ function validateInputTypes(scriptData: any): void {
       if (typeof role.team !== 'string') {
         throw new Error(`自定义角色[${i}]的team必须是字符串类型`);
       }
-      if (
-        !['townsfolk', 'outsider', 'minion', 'demon', 'traveler', 'traveller', 'fabled'].includes(
-          role.team,
-        )
-      ) {
-        throw new Error(`自定义角色[${i}]的team必须是有效的阵营类型`);
-      }
       if (typeof role.ability !== 'string') {
         throw new Error(`自定义角色[${i}]的ability必须是字符串类型`);
       }
