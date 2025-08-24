@@ -493,6 +493,7 @@ function generateHTML(
                 tempContainer.style.top = '-9999px';
                 tempContainer.style.width = '480px';
                 tempContainer.style.padding = '8px';
+                tempContainer.style.paddingTop = '2px';
                 tempContainer.style.backgroundColor = getComputedStyle(document.body).backgroundColor;
                 tempContainer.style.color = getComputedStyle(document.body).color;
                 tempContainer.style.fontFamily = getComputedStyle(document.body).fontFamily;
