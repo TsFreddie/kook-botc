@@ -115,12 +115,8 @@ class CardRenderer extends Card<Props> {
 
     if (state.busy.value) {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}（操作中，请耐心等待...）`;
-      groups.map((group) => {
-        group.map((button) => ({
-          text: button.text,
-          theme: 'secondary',
-          value: button.value,
-        }));
+      groups.forEach((group) => {
+        group.forEach((button) => (button.theme = 'secondary'));
       });
     } else {
       header = `**(font)${icon} 说书人控制台(font)[warning]** ${mode}`;
@@ -137,4 +133,4 @@ class CardRenderer extends Card<Props> {
   }
 }
 
-export default (state: Props) => $card(new CardRenderer(state));
+export default (state: Props) => $card(new CardRenderer(state, 0, 100, true));

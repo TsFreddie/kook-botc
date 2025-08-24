@@ -97,8 +97,9 @@ class CardRenderer extends Card<Props> {
 
       case ListMode.SPECTATE:
         const spectatorVoice = state.listArg.value === 1;
-        status =
-          '**(font)旁观调整(font)[info]**\n点击按钮切换玩家是否旁观，旁观者在游戏进行时将被禁言';
+        status = spectatorVoice
+          ? '**(font)旁观调整(font)[info]**\n调整玩家旁观状态，旁观者在游戏开始后(font)可以发言(font)[success]'
+          : '**(font)旁观调整(font)[info]**\n调整玩家旁观状态，旁观者在游戏开始后(font)将被禁言(font)[warning]';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([
           { text: '　', theme: 'secondary' },

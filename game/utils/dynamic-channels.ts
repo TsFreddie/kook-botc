@@ -235,9 +235,11 @@ export class DynamicChannels {
                 channel_id: newChannel.id,
                 type: 'user_id',
                 value: userId,
-                deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+                allow: Permission.CONNECT_VOICE,
+                deny: Permission.VIEW_CHANNELS,
               },
         ),
+
         BOT.api.channelRoleUpdate(
           this.showingCottages
             ? {
@@ -250,7 +252,8 @@ export class DynamicChannels {
                 channel_id: newChannel.id,
                 type: 'user_id',
                 value: this.storytellerId,
-                deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+                allow: Permission.CONNECT_VOICE,
+                deny: Permission.VIEW_CHANNELS,
               },
         ),
       ];
@@ -286,7 +289,7 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'role_id',
             value: this.roleId,
-            allow: Permission.VIEW_CHANNELS,
+            allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
           }),
         );
       });
@@ -320,6 +323,7 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'role_id',
             value: this.roleId,
+            allow: Permission.CONNECT_VOICE,
             deny: Permission.VIEW_CHANNELS,
           }),
         );
@@ -394,13 +398,15 @@ export class DynamicChannels {
             channel_id: channelId,
             type: 'user_id',
             value: userId,
-            deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+            allow: Permission.CONNECT_VOICE,
+            deny: Permission.VIEW_CHANNELS,
           }),
           BOT.api.channelRoleUpdate({
             channel_id: channelId,
             type: 'user_id',
             value: this.storytellerId,
-            deny: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+            allow: Permission.CONNECT_VOICE,
+            deny: Permission.VIEW_CHANNELS,
           }),
         );
       });
@@ -437,6 +443,20 @@ export class DynamicChannels {
    */
   getStorytellerInCottage(storytellerChannelId: string): string | null {
     return this.getCottageOwner(storytellerChannelId);
+  }
+
+  /**
+   * 根据频道ID获取动态频道名称
+   * @param channelId 要查询的频道ID
+   * @returns 如果是动态频道，返回频道名称，否则返回null
+   */
+  getChannelNameById(channelId: string): string | null {
+    for (const [name, id] of this.channels.entries()) {
+      if (id === channelId) {
+        return name;
+      }
+    }
+    return null;
   }
 
   /** 如果用户离开了小镇，可以删除他的小屋 */

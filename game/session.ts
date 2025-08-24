@@ -379,6 +379,18 @@ export class Session {
     return this.players.find((p) => p.id === user) !== undefined;
   }
 
+  /**
+   * 根据频道ID获取频道名称
+   * @param channelId
+   * @returns
+   */
+  private getChannelNameById(channelId: string): string | null {
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return null;
+
+    return dynamicChannels.getChannelNameById(channelId);
+  }
+
   private internalPlayerToCottage() {
     // 移动所有玩家到小木屋
     const dynamicChannels = this.renderer.dynamicChannels;
@@ -494,6 +506,26 @@ export class Session {
     const slot = (userId: string, text: string, color: string) => {
       return `(font)${text}(font)[${this.townsquareUsers.has(userId) ? color : 'tips'}]`;
     };
+    const channelInfo = (userId: string) => {
+      const channelId = this.activeUsers.get(userId);
+      if (!channelId || channelId === this.renderer.voiceChannelId) {
+        return null; // 不显示主语音频道
+      }
+
+      // 检查是否是小屋
+      const cottageOwner = this.renderer.dynamicChannels?.getCottageOwner(channelId);
+      if (cottageOwner) {
+        return `(font)🏠小屋(font)[tips]`;
+      }
+
+      // 检查是否是动态频道（地点）
+      const channelName = this.getChannelNameById(channelId);
+      if (channelName) {
+        return `(font)${channelName}(font)[tips]`;
+      }
+
+      return null;
+    };
     const status = (player: PlayerState) => {
       switch (player.status) {
         case PlayerStatus.ALIVE:
@@ -531,6 +563,7 @@ export class Session {
         status(p),
         vote(p.vote),
         `(met)${p.id}(met)`,
+        channelInfo(p.id),
       ];
 
       return {
@@ -544,13 +577,14 @@ export class Session {
     const storytellerInfoColumns = [
       slot(this.storytellerId, '说书人', 'warning'),
       `(met)${this.storytellerId}(met)`,
+      channelInfo(this.storytellerId),
     ];
 
     players.push({
       type: 'storyteller',
       id: this.storytellerId,
       joined: joinedPlayers.has(this.storytellerId),
-      info: storytellerInfoColumns.join(SEP),
+      info: storytellerInfoColumns.filter((item) => item !== null).join(SEP),
     });
 
     // 添加旁观玩家（有会话权限但不在游戏中的用户）
@@ -566,15 +600,17 @@ export class Session {
     spectators.sort().forEach((userId) => {
       // Build spectator info using array for consistency
       const spectatorInfoColumns = [
+        mute(userId),
         slot(this.storytellerId, '旁观者', 'purple'),
         `(met)${userId}(met)`,
+        channelInfo(userId),
       ];
 
       players.push({
         type: 'spectator',
         id: userId,
         joined: true,
-        info: spectatorInfoColumns.join(SEP),
+        info: spectatorInfoColumns.filter((item) => item !== null).join(SEP),
       });
     });
 
@@ -1267,10 +1303,6 @@ export class Session {
       return;
     }
 
-    // 更新禁言状态
-    this.updateMuteState();
-    this.updatePlayerList();
-
     // 准备阶段加入语音的玩家会自动成为玩家
     if (this.isPreparing() && !this.internalHasPlayer(userId)) {
       this.internalAddPlayer(userId);
@@ -1296,6 +1328,10 @@ export class Session {
     ) {
       this.renderer.dynamicChannels?.roamUserToCottage(userId);
     }
+
+    // 更新禁言状态
+    this.updateMuteState();
+    this.updatePlayerList();
   }
 
   systemPlayerLeaveVoiceChannel(userId: string) {
