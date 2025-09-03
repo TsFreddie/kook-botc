@@ -7,6 +7,7 @@ import { ApiMessageType } from './lib/api.ts';
 import { introCard } from './templates/intro.ts';
 import { createActionCard, createdCard, creatingInfo, existedCard } from './templates/create.ts';
 import type { TextMessageEvent } from './lib/events.ts';
+import { MessageType } from './lib/events.ts';
 
 BOT.on('error', (error) => {
   console.error('💥 机器人错误:', error);
@@ -58,6 +59,56 @@ process.on('unhandledRejection', (reason) => {
   shutdown();
 });
 
+const processCardSend = async (event: TextMessageEvent) => {
+  if (!process.env.ADMIN_ID || event.author_id !== process.env.ADMIN_ID) {
+    return;
+  }
+
+  if (event.type !== MessageType.CARD) {
+    return;
+  }
+
+  // Card message - check if first module is context with /send
+  try {
+    const cards = JSON.parse(event.content);
+    if (Array.isArray(cards) && cards.length > 0) {
+      const firstCard = cards[0];
+      if (firstCard.modules && Array.isArray(firstCard.modules) && firstCard.modules.length > 0) {
+        const firstModule = firstCard.modules[0];
+        if (
+          firstModule.type === 'context' &&
+          firstModule.elements &&
+          Array.isArray(firstModule.elements) &&
+          firstModule.elements.length > 0
+        ) {
+          const firstElement = firstModule.elements[0];
+          if (firstElement.content === '/send') {
+            // Delete the original message
+            await BOT.api.messageDelete({ msg_id: event.msg_id });
+
+            // Create card without the first module
+            const remainingModules = firstCard.modules.slice(1);
+            if (remainingModules.length > 0) {
+              const modifiedCard = {
+                ...firstCard,
+                modules: remainingModules,
+              };
+              await BOT.api.messageCreate({
+                target_id: event.target_id,
+                type: ApiMessageType.CARD,
+                content: JSON.stringify([modifiedCard]),
+              });
+            }
+          }
+        }
+      }
+    }
+  } catch (error) {
+    // If parsing fails, ignore
+    return;
+  }
+};
+
 const processAdminCommand = async (event: TextMessageEvent) => {
   if (process.env.ADMIN_ID) {
     if (event.author_id !== process.env.ADMIN_ID || event.content !== '/setup') {
@@ -105,6 +156,9 @@ BOT.onTextMessage(async (event) => {
 
   // 处理托梦
   routeMessage(event);
+
+  // 处理卡片 /send 指令
+  await processCardSend(event);
 
   // 处理 /setup 指令
   await processAdminCommand(event);
