@@ -961,6 +961,7 @@ export interface KookEventMap {
   connecting: () => void;
   connected: () => void;
   ready: () => void;
+  reconnected: () => void;
   disconnected: (event: KookCloseEvent) => void;
   error: (error: Error) => void;
 
@@ -1051,6 +1052,7 @@ export class KookClient extends KookEventEmitter {
   private config: Required<KookClientConfig>;
   private state: ConnectionState = ConnectionState.DISCONNECTED;
   private ws?: WebSocket;
+  private isFirstConnection: boolean = true;
 
   // Component managers
   private gateway: GatewayManager;
@@ -1213,7 +1215,15 @@ export class KookClient extends KookEventEmitter {
       this.setState(ConnectionState.AUTHENTICATED);
       this.session.setSession(signal.d.session_id!, '', 0);
       this.heartbeat.start(this.sequencer.getLastProcessedSN());
-      this.emit('ready');
+
+      // Only emit 'ready' on the first successful connection
+      if (this.isFirstConnection) {
+        this.emit('ready');
+        this.isFirstConnection = false;
+      } else {
+        // Emit a different event for reconnections
+        this.emit('reconnected');
+      }
     } else {
       const error = new Error(`Authentication failed: ${signal.d.code}`);
       this.emit('error', error);

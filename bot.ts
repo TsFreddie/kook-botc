@@ -290,6 +290,20 @@ const promise = new Promise<GameConfig>(async (resolve) => {
     console.log('✅ 机器人已就位！');
   });
 
+  bot.on('reconnected', () => {
+    console.log('🔄 机器人重新连接成功！');
+    LOG('🔄 机器人重新连接');
+  });
+
+  bot.on('reconnect', (data) => {
+    console.log('🔄 正在重新连接...', data);
+  });
+
+  bot.on('resumed', (data) => {
+    console.log('🔄 会话恢复成功！', data.session_id);
+    LOG('🔄 会话恢复成功');
+  });
+
   await bot.connect();
 });
 
