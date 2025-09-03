@@ -31,7 +31,7 @@ export class Router {
   /**
    * 创建新会话
    */
-  async createSession(storyteller: string) {
+  async createSession(storyteller: string, isOpen: boolean = false) {
     if (this.destroyed) return null;
 
     if (this.userMap.has(storyteller)) {
@@ -88,7 +88,7 @@ export class Router {
       transferSession: (newStorytellerId, activeUsers) => {
         this.handleTransferSession(session, newStorytellerId, activeUsers);
       },
-    });
+    }, isOpen);
 
     // 说书人始终属于其创建的会话
     data.users.add(storyteller);

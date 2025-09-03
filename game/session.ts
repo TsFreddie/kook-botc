@@ -226,9 +226,9 @@ export class Session {
   public readonly storytellerId: string;
   public readonly renderer: Renderer;
 
-  constructor(storytellerId: string, register: Register) {
+  constructor(storytellerId: string, register: Register, isOpen: boolean = false) {
     this.storytellerId = storytellerId;
-    this.renderer = new Renderer(storytellerId, register, this.state);
+    this.renderer = new Renderer(storytellerId, register, this.state, isOpen);
     this.register = register;
 
     // 初始化完成后进入等待说书人状态

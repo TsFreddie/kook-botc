@@ -165,7 +165,7 @@ BOT.onTextMessage(async (event) => {
 });
 
 // 创建房间逻辑
-const createRoom = async (user: string, message: string) => {
+const createRoom = async (user: string, message: string, isPrivate: boolean = false) => {
   // 更新消息为创建中
   await BOT.api.messageUpdate({
     msg_id: message,
@@ -173,7 +173,7 @@ const createRoom = async (user: string, message: string) => {
     temp_target_id: user,
   });
 
-  const result = await ROUTER.createSession(user);
+  const result = await ROUTER.createSession(user, !isPrivate);
   if (!result) return;
 
   const { session, isNew } = result;
@@ -309,6 +309,12 @@ BOT.onMessageBtnClick(async (event) => {
   switch (value) {
     case 'createRoom':
       await createRoom(event.extra.body.user_id, event.extra.body.msg_id);
+      break;
+    case 'createPublicRoom':
+      await createRoom(event.extra.body.user_id, event.extra.body.msg_id, false);
+      break;
+    case 'createPrivateRoom':
+      await createRoom(event.extra.body.user_id, event.extra.body.msg_id, true);
       break;
   }
 });

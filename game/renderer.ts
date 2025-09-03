@@ -73,6 +73,9 @@ export class Renderer {
   get dynamicChannels() {
     return this._dynamicChannels;
   }
+  get isOpen() {
+    return this.open.value;
+  }
 
   private roles = new UserRoles();
 
@@ -87,10 +90,12 @@ export class Renderer {
     private storytellerId: string,
     private register: Register,
     private state: GameState,
+    isOpen: boolean = false,
   ) {
     const townName = randomTownName();
     this.name.set(townName);
     this.storytellerIdState.set(storytellerId);
+    this.open.set(isOpen);
 
     this._userCard = new UserCard({
       content: JSON.stringify([
@@ -280,6 +285,16 @@ export class Renderer {
         value: this.roleId.toString(),
         allow: Permission.CONNECT_VOICE,
       });
+
+      // 设置初始开放状态
+      if (this.open.value) {
+        await BOT.api.channelRoleUpdate({
+          channel_id: this._voiceChannelId,
+          type: 'role_id',
+          value: '0',
+          allow: Permission.CONNECT_VOICE,
+        });
+      }
 
       this.rendererState = RendererState.Initialized;
     } catch (err) {

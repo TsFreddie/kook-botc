@@ -1,4 +1,30 @@
-const buttonText = '如果你是「说书人」，点击**(font)【创建】(font)[primary]**按钮创建小镇';
+const buttonText = '如果你是(font)「说书人」(font)[warning]，使用下面的按钮创建小镇';
+
+const createButtons = {
+  type: 'action-group',
+  elements: [
+    {
+      type: 'button',
+      theme: 'primary',
+      text: {
+        type: 'plain-text',
+        content: '公开小镇',
+      },
+      click: 'return-val',
+      value: 'createPublicRoom',
+    },
+    {
+      type: 'button',
+      theme: 'warning',
+      text: {
+        type: 'plain-text',
+        content: '限邀请小镇',
+      },
+      click: 'return-val',
+      value: 'createPrivateRoom',
+    },
+  ],
+};
 
 export const createActionCard = [
   {
@@ -10,18 +36,8 @@ export const createActionCard = [
           type: 'kmarkdown',
           content: `${buttonText}`,
         },
-        mode: 'right',
-        accessory: {
-          type: 'button',
-          theme: 'primary',
-          text: {
-            type: 'plain-text',
-            content: '创建',
-          },
-          click: 'return-val',
-          value: 'createRoom',
-        },
       },
+      createButtons,
     ],
   },
 ];
@@ -53,18 +69,8 @@ export const createdCard = (name: string, channelId: string) => [
           type: 'kmarkdown',
           content: `${buttonText}`,
         },
-        mode: 'right',
-        accessory: {
-          type: 'button',
-          theme: 'primary',
-          text: {
-            type: 'plain-text',
-            content: '创建',
-          },
-          click: 'return-val',
-          value: 'createRoom',
-        },
       },
+      createButtons,
       {
         type: 'divider',
       },
@@ -91,18 +97,8 @@ export const existedCard = (name: string, channelId: string) => [
           type: 'kmarkdown',
           content: `${buttonText}`,
         },
-        mode: 'right',
-        accessory: {
-          type: 'button',
-          theme: 'primary',
-          text: {
-            type: 'plain-text',
-            content: '创建',
-          },
-          click: 'return-val',
-          value: 'createRoom',
-        },
       },
+      createButtons,
       {
         type: 'divider',
       },
