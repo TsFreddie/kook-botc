@@ -125,22 +125,16 @@ export class DynamicChannels {
   }
 
   /**
-   * 将说书人移动到指定玩家的小屋中，如果玩家没有小屋则不会移动
+   * 将说书人移动到指定玩家的小屋中
    *
    * 该方法限速，说书人如果被限速则不会移动
    */
-  roamStorytellerToCottage(userId: string) {
+  roamVisitCottage(userId: string, targetCottageUserId: string) {
     if (this.destroyed) return;
-    if (this.isThrottled(this.storytellerId)) return;
-    this.throttle(this.storytellerId);
+    if (this.isThrottled(userId)) return;
+    this.throttle(userId);
 
-    const cottage = this.cottages.get(userId);
-    if (!cottage) return;
-
-    this.queue.push(async () => {
-      await BOT.api.channelMoveUser(cottage, [this.storytellerId]);
-      this.taskFinishTime = Date.now();
-    });
+    this.moveUserToCottage(userId, targetCottageUserId);
   }
 
   /**
@@ -169,7 +163,7 @@ export class DynamicChannels {
     if (this.isThrottled(userId)) return;
     this.throttle(userId);
 
-    this.moveUserToCottage(userId);
+    this.moveUserToCottage(userId, userId);
   }
 
   /**
@@ -192,15 +186,15 @@ export class DynamicChannels {
     if (this.destroyed) return;
 
     users.forEach((user) => {
-      this.moveUserToCottage(user);
+      this.moveUserToCottage(user, user);
     });
   }
 
-  private moveUserToCottage(userId: string) {
+  private moveUserToCottage(userId: string, cottageUserId: string) {
     if (this.destroyed) return;
     this.queue.push(async () => {
       // 如果小屋已经存在，则直接加入即可
-      const cottage = this.cottages.get(userId);
+      const cottage = this.cottages.get(cottageUserId);
       if (cottage) {
         await BOT.api.channelMoveUser(cottage, [userId]);
         this.taskFinishTime = Date.now();
@@ -208,7 +202,7 @@ export class DynamicChannels {
       }
 
       // 获取用户信息
-      const user = await BOT.api.userView({ user_id: userId, guild_id: GAME.guildId });
+      const user = await BOT.api.userView({ user_id: cottageUserId, guild_id: GAME.guildId });
       // 创建频道
       const newChannel = await BOT.api.channelCreate({
         guild_id: GAME.guildId,
@@ -222,24 +216,28 @@ export class DynamicChannels {
       this.createdChannels.add(newChannel.id);
 
       // 配置频道权限(仅用户自己与说书人可见)
-      const permissionUpdates = [
-        BOT.api.channelRoleUpdate(
-          this.showingCottages
-            ? {
-                channel_id: newChannel.id,
-                type: 'user_id',
-                value: userId,
-                allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
-              }
-            : {
-                channel_id: newChannel.id,
-                type: 'user_id',
-                value: userId,
-                allow: Permission.CONNECT_VOICE,
-                deny: Permission.VIEW_CHANNELS,
-              },
-        ),
-
+      const permissionUpdates = [];
+      if (this.storytellerId !== cottageUserId) {
+        permissionUpdates.push(
+          BOT.api.channelRoleUpdate(
+            this.showingCottages
+              ? {
+                  channel_id: newChannel.id,
+                  type: 'user_id',
+                  value: cottageUserId,
+                  allow: Permission.VIEW_CHANNELS | Permission.CONNECT_VOICE,
+                }
+              : {
+                  channel_id: newChannel.id,
+                  type: 'user_id',
+                  value: cottageUserId,
+                  allow: Permission.CONNECT_VOICE,
+                  deny: Permission.VIEW_CHANNELS,
+                },
+          ),
+        );
+      }
+      permissionUpdates.push(
         BOT.api.channelRoleUpdate(
           this.showingCottages
             ? {
@@ -256,7 +254,7 @@ export class DynamicChannels {
                 deny: Permission.VIEW_CHANNELS,
               },
         ),
-      ];
+      );
 
       const result = await Promise.allSettled(permissionUpdates);
       result.forEach((result) => {
@@ -265,8 +263,8 @@ export class DynamicChannels {
         }
       });
 
+      this.cottages.set(cottageUserId, newChannel.id);
       await BOT.api.channelMoveUser(newChannel.id, [userId]);
-      this.cottages.set(userId, newChannel.id);
       this.taskFinishTime = Date.now();
     });
   }

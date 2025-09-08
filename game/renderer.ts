@@ -82,7 +82,7 @@ export class Renderer {
   private readonly invite = $state('');
   private readonly open = $state(false);
   private readonly storytellerIdState = $state('');
-  private readonly messagingQueue = new SequentialQueue();
+  private readonly sequentialQueue = new SequentialQueue();
 
   private cleanupCallback: (() => void) | null = null;
 
@@ -273,7 +273,6 @@ export class Renderer {
 
       // 为说书人赋予游戏角色与说书人角色
       this.roles.grant(this.storytellerId, this.roleId);
-      this.roles.grant(this.storytellerId, GAME.storytellerRoleId);
 
       // 开放配置好的频道
       await Promise.allSettled(lateCallbacks.map((cb) => cb()));
@@ -308,6 +307,59 @@ export class Renderer {
     }
   }
 
+  setHelperPermission(userId: string) {
+    this.sequentialQueue.push(async () => {
+      const result = await Promise.allSettled([
+        // 禁止助手查看城镇广场
+        BOT.api.channelRoleUpdate({
+          channel_id: this._townsquareChannelId,
+          type: 'user_id',
+          value: userId,
+          deny: Permission.VIEW_CHANNELS,
+        }),
+
+        // 允许助手查看说书人频道
+        await BOT.api.channelRoleUpdate({
+          channel_id: this._storytellerChannelId,
+          type: 'user_id',
+          value: userId,
+          allow: Permission.VIEW_CHANNELS | Permission.SEND_MESSAGES,
+        }),
+      ]);
+
+      result.forEach((result) => {
+        if (result.status == 'rejected') {
+          console.error(result.reason);
+        }
+      });
+    });
+  }
+
+  removeHelperPermission(userId: string) {
+    this.sequentialQueue.push(async () => {
+      const result = await Promise.allSettled([
+        // 清空助手权限
+        BOT.api.channelRoleDelete({
+          channel_id: this._townsquareChannelId,
+          type: 'user_id',
+          value: userId,
+        }),
+
+        await BOT.api.channelRoleDelete({
+          channel_id: this._storytellerChannelId,
+          type: 'user_id',
+          value: userId,
+        }),
+      ]);
+
+      result.forEach((result) => {
+        if (result.status == 'rejected') {
+          console.error(result.reason);
+        }
+      });
+    });
+  }
+
   private async createTextChannel(name: string, mode: ChannelMode) {
     const channel = await BOT.api.channelCreate({
       guild_id: GAME.guildId,
@@ -329,7 +381,7 @@ export class Renderer {
             allow: Permission.VIEW_CHANNELS,
           }),
 
-          // 禁止说书人发言
+          // 禁止说书人查看
           BOT.api.channelRoleUpdate({
             channel_id: channel.id,
             type: 'user_id',
@@ -374,7 +426,7 @@ export class Renderer {
   setOpen(open: boolean) {
     if (this.open.value == open) return;
     this.open.set(open);
-    this.messagingQueue.push(async () => {
+    this.sequentialQueue.push(async () => {
       await BOT.api.channelRoleUpdate({
         channel_id: this._voiceChannelId,
         type: 'role_id',
@@ -389,7 +441,7 @@ export class Renderer {
    * 向城镇广场发送消息
    */
   sendMessageToTownsquare(type: ApiMessageType, content: string) {
-    this.messagingQueue.push(async () => {
+    this.sequentialQueue.push(async () => {
       await BOT.api.messageCreate({
         target_id: this._townsquareChannelId,
         type: type,
@@ -402,7 +454,7 @@ export class Renderer {
    * 向主语音频道发送消息
    */
   sendMessageToVoiceChannel(type: ApiMessageType, content: string, template_id?: string) {
-    this.messagingQueue.push(async () => {
+    this.sequentialQueue.push(async () => {
       await BOT.api.messageCreate({
         target_id: this._voiceChannelId,
         type: type,
@@ -416,7 +468,7 @@ export class Renderer {
    * 删除一条消息
    */
   deleteMessage(messageId: string) {
-    this.messagingQueue.push(async () => {
+    this.sequentialQueue.push(async () => {
       try {
         await BOT.api.messageDelete({ msg_id: messageId });
       } catch {
@@ -439,7 +491,7 @@ export class Renderer {
     }
 
     // 停止队列
-    await this.messagingQueue.destroy(true);
+    await this.sequentialQueue.destroy(true);
 
     // 卸载邀请链接
     try {
@@ -484,8 +536,6 @@ export class Renderer {
       }
     });
 
-    // 撤销说书人的角色
-    this.roles.revoke(this.storytellerId, GAME.storytellerRoleId);
     await this.roles.destroy();
 
     // 删除生成的角色

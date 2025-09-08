@@ -98,23 +98,6 @@ const initialize = async () => {
 
   console.log(`🔄 已初始化消息模版`);
 
-  // 检查是否存在"说书人"身份，没有的话创建一个
-  const roles = await bot.api.roleList({ guild_id });
-
-  let storytellerRoleId = roles.items.filter((role) => role.name === '说书人')[0]?.role_id;
-  if (!storytellerRoleId) {
-    const role = await bot.api.roleCreate({ guild_id, name: '说书人' });
-    console.log(role);
-    storytellerRoleId = role.role_id;
-  }
-
-  if (!storytellerRoleId) {
-    console.error('❌ 身份组初始化失败...');
-    process.exit(1);
-  }
-
-  console.log(`🔄 已初始化身份组: ${storytellerRoleId}`);
-
   const channels = await bot.api.channelList({ guild_id });
 
   // 检查是否存在"鸦木布拉夫"分组，没有的话创建一个
@@ -269,7 +252,6 @@ const initialize = async () => {
 
   return {
     guildId: guild_id,
-    storytellerRoleId: storytellerRoleId,
     roomCategoryId: roomCategory.id,
     gameCategoryId: gameCategory.id,
     cottageCategoryId: cottageCategory.id,

@@ -234,7 +234,7 @@ BOT.onMessageBtnClick(async (event) => {
     const handlerName = 'storyteller' + actionName;
     const handler = (session as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(session, ...args);
+      await handler.call(session, event.extra.body.user_id, ...args);
     }
     return;
   }
@@ -295,13 +295,13 @@ BOT.onMessageBtnClick(async (event) => {
     // 检查会话是否被锁定
     if (session.isLocked) return;
 
-    const [action, userId] = value.slice(4).split('|');
-    if (!action || !userId) return;
+    const [action, targetUserId] = value.slice(4).split('|');
+    if (!action || !targetUserId) return;
 
     const handlerName = 'storytellerSelect' + action;
     const handler = (session as any)[handlerName];
     if (handler && typeof handler === 'function') {
-      await handler.call(session, userId);
+      await handler.call(session, targetUserId, event.extra.body.user_id);
     }
     return;
   }

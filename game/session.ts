@@ -94,6 +94,8 @@ export enum ListMode {
   SWAP,
   /** 旁观 */
   SPECTATE,
+  /** 文书 */
+  HELPER,
   /** 禁言 */
   MUTE,
   /** 踢出 */
@@ -113,7 +115,7 @@ export enum ListMode {
 }
 
 export interface ListPlayerItem {
-  type: 'player' | 'spectator' | 'storyteller';
+  type: 'player' | 'spectator' | 'storyteller' | 'helper';
   id: string;
   info: string;
   joined: boolean;
@@ -210,6 +212,7 @@ export class Session {
   private destroyed = false;
   private greeted = new Set<string>();
   private userInfoCards = new Map<string, { seq: number; card: any[] }>();
+  private helperSet = new Set<string>();
 
   /** 投票管理 */
   private readonly vote = new VoteManager(this.players, this.state, () => this.updatePlayerList());
@@ -471,6 +474,8 @@ export class Session {
   private shouldUserBeMuted(userId: string): boolean {
     // 说书人永远不会被禁言
     if (userId === this.storytellerId) return false;
+    // 助手永远不会被禁言
+    if (this.helperSet.has(userId)) return false;
 
     // 如果目前为上麦模式
     if (this.state.listMode.value === ListMode.SPOTLIGHT) {
@@ -623,13 +628,15 @@ export class Session {
       // Build spectator info using array for consistency
       const spectatorInfoColumns = [
         mute(userId),
-        slot(this.storytellerId, '旁观者', 'purple'),
+        this.helperSet.has(userId)
+          ? slot(userId, '助手', 'warning')
+          : slot(userId, '旁观者', 'purple'),
         `(met)${userId}(met)`,
         channelInfo(userId),
       ];
 
       players.push({
-        type: 'spectator',
+        type: this.helperSet.has(userId) ? 'helper' : 'spectator',
         id: userId,
         joined: true,
         info: spectatorInfoColumns.filter((item) => item !== null).join(SEP),
@@ -874,6 +881,12 @@ export class Session {
     this.updatePlayerList();
   }
 
+  protected storytellerListHelper() {
+    this.listSelection = new Set();
+    this.state.listMode.set(ListMode.HELPER);
+    this.updatePlayerList();
+  }
+
   protected storytellerToggleSpectatorMute() {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
@@ -1009,6 +1022,7 @@ export class Session {
     if (this.state.listMode.value !== ListMode.SPECTATE) return;
 
     if (userId === this.storytellerId) return;
+    if (this.helperSet.has(userId)) return;
 
     if (this.internalHasPlayer(userId)) {
       this.internalRemovePlayer(userId);
@@ -1018,6 +1032,32 @@ export class Session {
 
     // 更改旁观状态后刷新禁言状态
     this.updateMuteState();
+    this.updatePlayerList();
+  }
+
+  protected storytellerSelectHelper(userId: string) {
+    if (this.state.listMode.value !== ListMode.HELPER) return;
+
+    if (userId === this.storytellerId) return;
+
+    // 成为助手的玩家不再参与游戏
+    if (this.internalHasPlayer(userId)) {
+      this.internalRemovePlayer(userId);
+    }
+
+    // 助手不能有禁言状态
+    if (this.muteSet.has(userId)) {
+      this.muteSet.delete(userId);
+    }
+
+    if (this.helperSet.has(userId)) {
+      this.helperSet.delete(userId);
+      this.renderer.removeHelperPermission(userId);
+    } else {
+      this.helperSet.add(userId);
+      this.renderer.setHelperPermission(userId);
+    }
+
     this.updatePlayerList();
   }
 
@@ -1035,6 +1075,8 @@ export class Session {
 
     // 不可以禁言说书人
     if (userId === this.storytellerId) return;
+    // 不可以禁言助手
+    if (this.helperSet.has(userId)) return;
 
     if (this.muteSet.has(userId)) {
       this.muteSet.delete(userId);
@@ -1051,6 +1093,8 @@ export class Session {
 
     // 说书人始终可以说话，所以说书人不能上麦
     if (userId === this.storytellerId) return;
+    // 助手也不能上麦
+    if (this.helperSet.has(userId)) return;
 
     if (this.listSelection.has(userId)) {
       this.listSelection.delete(userId);
@@ -1119,31 +1163,24 @@ export class Session {
     this.updatePlayerList();
   }
 
+  protected storytellerGotoTownsquare(userId: string) {
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    dynamicChannels.roamUserToMainChannel(userId);
+  }
+
   /**
    * 说书人可以更改玩家投票
    */
-  protected storytellerSelectCottage(userId: string) {
+  protected storytellerSelectCottage(targetId: string, userId: string) {
     if (this.state.listMode.value !== ListMode.COTTAGE) return;
-
-    // 只有玩家有小屋
-    if (!this.internalHasPlayer(userId)) return;
 
     const dynamicChannels = this.renderer.dynamicChannels;
     if (!dynamicChannels) return;
 
-    // 检查说书人当前是否已经在这个玩家的小屋中
-    const storytellerChannelId = this.activeUsers.get(this.storytellerId);
-    if (storytellerChannelId) {
-      const currentCottageOwnerId = dynamicChannels.getStorytellerInCottage(storytellerChannelId);
-      if (currentCottageOwnerId === userId) {
-        // 说书人已经在这个玩家的小屋中，返回主频道
-        dynamicChannels.roamUserToMainChannel(this.storytellerId);
-        return;
-      }
-    }
-
     // 说书人进入玩家的小屋
-    dynamicChannels.roamStorytellerToCottage(userId);
+    dynamicChannels.roamVisitCottage(userId, targetId);
   }
 
   protected async storytellerSelectTransfer(userId: string) {
@@ -1439,6 +1476,12 @@ export class Session {
     // 如果存在的话，删除玩家的小屋
     this.renderer.dynamicChannels?.destroyCottageForUser(userId);
     this.updatePlayerList();
+
+    // 如果是助手，移除权限
+    if (this.helperSet.has(userId)) {
+      this.helperSet.delete(userId);
+      this.renderer.removeHelperPermission(userId);
+    }
   }
 
   /**

@@ -102,7 +102,7 @@ class CardRenderer extends Card<Props> {
           : '**(font)旁观调整(font)[info]**\n调整玩家旁观状态，旁观者在游戏开始后(font)将被禁言(font)[warning]';
         groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([
-          { text: '　', theme: 'secondary' },
+          { text: '设置助手', theme: 'warning', value: '[st]ListHelper' },
           { text: '　', theme: 'secondary' },
           { text: '旁观语音', theme: 'secondary', value: '[st]ToggleSpectatorMute' },
           spectatorVoice
@@ -112,6 +112,15 @@ class CardRenderer extends Card<Props> {
         theme = 'info';
         action = { text: '移出游戏', theme: 'danger' };
         value = 'Spectate';
+        break;
+
+      case ListMode.HELPER:
+        status = '**(font)设置助手(font)[warning]**\n说书人助手将获得说书人视角';
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        groups.push([{ text: '旁观调整', theme: 'warning', value: '[st]ListSpectate' }]);
+        theme = 'warning';
+        action = { text: '设为助手', theme: 'info' };
+        value = 'Helper';
         break;
 
       case ListMode.MUTE:
@@ -183,7 +192,12 @@ class CardRenderer extends Card<Props> {
 
       case ListMode.COTTAGE:
         status = '**(font)小屋模式(font)[warning]**\n点击玩家进入其小屋';
-        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        groups.push([
+          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
+          { text: '城镇广场', theme: 'info', value: '[st]GotoTownsquare' },
+        ]);
         theme = 'info';
         action = { text: '进入', theme: 'info' };
         value = 'Cottage';
@@ -256,13 +270,21 @@ class CardRenderer extends Card<Props> {
         case ListMode.SPECTATE:
           if (item.type === 'spectator') {
             action = { text: '加入游戏', theme: 'info' };
-          } else if (item.type === 'storyteller') {
+          } else if (item.type === 'storyteller' || item.type === 'helper') {
             action = 'none';
           }
           break;
 
-        case ListMode.MUTE:
+        case ListMode.HELPER:
           if (item.type === 'storyteller') {
+            action = 'none';
+          } else if (item.type === 'helper') {
+            action = { text: '取消助手', theme: 'warning' };
+          }
+          break;
+
+        case ListMode.MUTE:
+          if (item.type === 'storyteller' || item.type === 'helper') {
             // 不能禁言说书人
             action = 'none';
           } else if (selectedSet.has(item.id)) {
@@ -278,7 +300,7 @@ class CardRenderer extends Card<Props> {
           break;
 
         case ListMode.SPOTLIGHT:
-          if (item.type === 'storyteller') {
+          if (item.type === 'storyteller' || item.type === 'helper') {
             // 说书人始终可以发言
             action = 'none';
           } else if (selectedSet.has(item.id)) {
@@ -298,14 +320,6 @@ class CardRenderer extends Card<Props> {
         case ListMode.NOMINATE:
           if (selectedSet.has(item.id)) {
             action = { text: '提名者', theme: 'secondary' };
-          }
-          break;
-
-        case ListMode.COTTAGE:
-          if (item.type !== 'player') {
-            action = 'none';
-          } else if (selectedSet.has(item.id)) {
-            action = { text: '离开', theme: 'danger' };
           }
           break;
 
