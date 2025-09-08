@@ -1,3 +1,4 @@
+import { CIRCLED_NUMBERS } from './consts';
 import { PlayerStatus, PlayerVoteStatus, type GameState, type PlayerState } from './session';
 
 /** 投票管理类 */
@@ -88,8 +89,12 @@ export class VoteManager {
     });
     this._voteOffset = 0;
 
+    // 投票编号
+    const fromSlot = CIRCLED_NUMBERS[this.players.findIndex((p) => p.id === this._from) + 1] || '⓪';
+    const toSlot = CIRCLED_NUMBERS[this.players.findIndex((p) => p.id === this._to) + 1] || '⓪';
+
     this.state.voteInfo.set(
-      `(met)${this.from}(met) 发起提名，投票(font)处决(font)[danger] (met)${this.to}(met)`,
+      `${fromSlot} (met)${this.from}(met) 发起提名，投票(font)处决(font)[danger] ${toSlot} (met)${this.to}(met)`,
     );
     // 开启投票状态
     this.state.voting.set(true);

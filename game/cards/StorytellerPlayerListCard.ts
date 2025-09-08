@@ -159,8 +159,8 @@ class CardRenderer extends Card<Props> {
         const voteTime = state.listArg.value;
         status =
           state.listSelected.length > 0
-            ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票是否处决指定玩家\n（统一计票模式不会轮流统计而是在时间结束后瞬间统计）'
-            : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家\n（统一计票模式不会轮流统计而是在时间结束后瞬间统计）';
+            ? '**(font)发起提名(font)[danger]**\n点击按钮发起投票处决指定玩家'
+            : '**(font)发起提名(font)[danger]**\n点击按钮选择发起提名的玩家';
         groups.push([
           { text: '退出', theme: 'danger', value: '[st]ListStatus' },
           { text: '　', theme: 'secondary' },
