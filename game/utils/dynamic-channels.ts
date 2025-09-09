@@ -154,16 +154,33 @@ export class DynamicChannels {
   }
 
   /**
+   * 将用户移动到指定频道ID
+   *
+   * 该方法限速，玩家如果被限速则不会移动
+   */
+  roamUserToChannel(userId: string, channelId: string) {
+    if (this.destroyed) return false;
+    if (this.isThrottled(userId)) return false;
+    this.throttle(userId);
+
+    this.queue.push(async () => {
+      await BOT.api.channelMoveUser(channelId, [userId]);
+      this.taskFinishTime = Date.now();
+    });
+    return true;
+  }
+
+  /**
    * 将用户移动到自己的小屋
    *
    * 该方法限速，玩家如果被限速则不会移动
    */
   roamUserToCottage(userId: string) {
-    if (this.destroyed) return;
-    if (this.isThrottled(userId)) return;
+    if (this.destroyed) return false;
+    if (this.isThrottled(userId)) return false;
     this.throttle(userId);
 
-    this.moveUserToCottage(userId, userId);
+    return this.moveUserToCottage(userId, userId);
   }
 
   /**
@@ -191,7 +208,7 @@ export class DynamicChannels {
   }
 
   private moveUserToCottage(userId: string, cottageUserId: string) {
-    if (this.destroyed) return;
+    if (this.destroyed) return false;
     this.queue.push(async () => {
       // 如果小屋已经存在，则直接加入即可
       const cottage = this.cottages.get(cottageUserId);
@@ -267,6 +284,8 @@ export class DynamicChannels {
       await BOT.api.channelMoveUser(newChannel.id, [userId]);
       this.taskFinishTime = Date.now();
     });
+
+    return true;
   }
 
   /**

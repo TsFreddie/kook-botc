@@ -69,10 +69,12 @@ class CardRenderer extends Card<Props> {
           { text: '托梦', theme: 'warning', value: '[st]ListPrivate' },
           { text: '提名', theme: 'danger', value: '[st]ListNominate' },
           { text: '上麦', theme: 'info', value: '[st]ListSpotlight' },
-          // 小屋按钮只在自由活动阶段显示
-          state.phase.value === Phase.ROAMING || state.phase.value === Phase.COTTAGE
-            ? { text: '小屋', theme: 'success', value: '[st]ListCottage' }
-            : { text: '　', theme: 'secondary' },
+          // 根据阶段显示不同按钮
+          state.phase.value === Phase.COTTAGE
+            ? { text: '传唤', theme: 'warning', value: '[st]ListSummon' }
+            : state.phase.value === Phase.ROAMING
+              ? { text: '小屋', theme: 'success', value: '[st]ListCottage' }
+              : { text: '　', theme: 'secondary' },
         ]);
         theme = 'secondary';
         action = { text: '切换', theme: 'info' };
@@ -191,16 +193,31 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.COTTAGE:
-        status = '**(font)小屋模式(font)[warning]**\n点击玩家进入其小屋';
+        status = '**(font)小屋模式(font)[success]**\n点击玩家进入其小屋';
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
         groups.push([
-          { text: '退出', theme: 'danger', value: '[st]ListStatus' },
+          { text: '传唤模式', theme: 'warning', value: '[st]ListSummon' },
           { text: '　', theme: 'secondary' },
           { text: '　', theme: 'secondary' },
           { text: '城镇广场', theme: 'info', value: '[st]GotoTownsquare' },
         ]);
-        theme = 'info';
+        theme = 'success';
         action = { text: '进入', theme: 'info' };
         value = 'Cottage';
+        break;
+
+      case ListMode.SUMMON:
+        status = '**(font)传唤模式(font)[warning]**\n将玩家传唤至你所在的语音频道';
+        groups.push([{ text: '退出', theme: 'danger', value: '[st]ListStatus' }]);
+        groups.push([
+          { text: '小屋模式', theme: 'success', value: '[st]ListCottage' },
+          { text: '　', theme: 'secondary' },
+          { text: '　', theme: 'secondary' },
+          { text: '城镇广场', theme: 'info', value: '[st]GotoTownsquare' },
+        ]);
+        theme = 'warning';
+        action = { text: '传唤', theme: 'warning' };
+        value = 'Summon';
         break;
 
       case ListMode.VOTING:
@@ -332,6 +349,14 @@ class CardRenderer extends Card<Props> {
         case ListMode.TRANSFER:
           if (item.type === 'storyteller') {
             action = 'none';
+          }
+          break;
+
+        case ListMode.SUMMON:
+          if (item.type === 'storyteller') {
+            action = 'none';
+          } else if (selectedSet.has(item.id)) {
+            action = { text: '送回', theme: 'danger' };
           }
           break;
       }

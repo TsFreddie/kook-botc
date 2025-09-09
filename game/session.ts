@@ -108,6 +108,8 @@ export enum ListMode {
   NOMINATE,
   /** 小屋 */
   COTTAGE,
+  /** 传唤 */
+  SUMMON,
   /** 正在投票 */
   VOTING,
   /** 换说书人 */
@@ -527,6 +529,8 @@ export class Session {
 
     const SEP = '　';
     const mute = (userId: string) => {
+      if (this.phase(Phase.COTTAGE)) return '';
+
       const canSpeak = this.activeUsers.has(userId) && !this.shouldUserBeMuted(userId);
       return canSpeak ? '🎙' : '🚫';
     };
@@ -534,6 +538,8 @@ export class Session {
       return `(font)${text}(font)[${this.townsquareUsers.has(userId) ? color : 'tips'}]`;
     };
     const channelInfo = (userId: string) => {
+      if (this.phase(Phase.COTTAGE)) return '';
+
       const channelId = this.activeUsers.get(userId);
       if (!channelId || channelId === this.renderer.voiceChannelId) {
         return null; // 不显示主语音频道
@@ -586,7 +592,11 @@ export class Session {
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
       const infoColumns = [
         mute(p.id),
-        slot(p.id, CIRCLED_NUMBERS[index + 1] || '⓪', 'success'),
+        slot(
+          p.id,
+          CIRCLED_NUMBERS[index + 1] || '⓪',
+          this.phase(Phase.COTTAGE) ? 'tips' : 'success',
+        ),
         status(p),
         vote(p.vote),
         `(met)${p.id}(met)`,
@@ -755,7 +765,7 @@ export class Session {
     this.updatePlayerList();
 
     // 自动切换到小屋模式
-    this.storytellerListCottage();
+    this.storytellerListSummon();
   }
 
   protected async storytellerGameRestart(winner?: 'good' | 'bad') {
@@ -938,12 +948,22 @@ export class Session {
   }
 
   protected storytellerListCottage() {
-    // 小屋模式只在自由活动阶段可用
+    // 小屋模式只在夜晚与自由活动阶段可用
     if (!this.phase(Phase.ROAMING, Phase.COTTAGE)) return;
 
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.COTTAGE);
+    this.updatePlayerList();
+  }
+
+  protected storytellerListSummon() {
+    // 小屋模式只在夜晚与自由活动阶段可用
+    if (!this.phase(Phase.ROAMING, Phase.COTTAGE)) return;
+
+    this.listSelection = new Set();
+    this.state.listArg.set(0);
+    this.state.listMode.set(ListMode.SUMMON);
     this.updatePlayerList();
   }
 
@@ -1181,6 +1201,38 @@ export class Session {
 
     // 说书人进入玩家的小屋
     dynamicChannels.roamVisitCottage(userId, targetId);
+  }
+
+  protected storytellerSelectSummon(targetId: string, userId: string) {
+    if (this.state.listMode.value !== ListMode.SUMMON) return;
+
+    if (targetId === userId) return;
+
+    const dynamicChannels = this.renderer.dynamicChannels;
+    if (!dynamicChannels) return;
+
+    if (this.listSelection.has(targetId)) {
+      // 送回小屋
+      const sent = dynamicChannels.roamUserToCottage(targetId);
+      if (sent) {
+        this.listSelection.delete(targetId);
+      }
+      return;
+    }
+
+    // 将玩家传唤至说书人所在的语音频道
+    const storytellerChannelId = this.activeUsers.get(userId);
+    if (storytellerChannelId) {
+      const sent = dynamicChannels.roamUserToChannel(targetId, storytellerChannelId);
+
+      if (
+        sent &&
+        this.state.listMode.value === ListMode.SUMMON &&
+        this.state.phase.value === Phase.COTTAGE
+      ) {
+        this.listSelection.add(targetId);
+      }
+    }
   }
 
   protected async storytellerSelectTransfer(userId: string) {
