@@ -1284,11 +1284,11 @@ export class Session {
     this.updatePlayerList();
   }
 
-  protected storytellerSetVoteTime(time: string) {
+  protected storytellerSetVoteTime(_: string, time: string) {
     if (this.state.listMode.value !== ListMode.NOMINATE) return;
 
     const voteTime = parseInt(time);
-    if (isNaN(voteTime) || voteTime <= 0) return;
+    if (isNaN(voteTime) || voteTime <= 0 || voteTime > 10) return;
 
     this.state.listArg.set(voteTime);
     this.vote.voteTime = voteTime;

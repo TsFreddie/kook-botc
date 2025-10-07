@@ -230,7 +230,7 @@ export class VoteManager {
     try {
       const start = Date.now();
       this.state.votingStart.set(start);
-      this.state.votingEnd.set(start + this.voteTime * 1000 * this.players.length);
+      this.state.votingEnd.set(start + this.voteTime * 1000 * Math.max(this.players.length, 1));
 
       const playerCount = this.players.length;
       for (let i = 0; i < playerCount; i++) {
@@ -262,7 +262,7 @@ export class VoteManager {
     try {
       const start = Date.now();
       this.state.votingStart.set(start);
-      this.state.votingEnd.set(start + this.voteTime * 1000 * this.players.length);
+      this.state.votingEnd.set(start + this.voteTime * 1000 * Math.max(this.players.length, 1));
       await this.wait(this.voteTime * 1000 * this.players.length);
 
       // 锁定所有人投票
