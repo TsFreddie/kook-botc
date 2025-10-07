@@ -119,7 +119,9 @@ export enum ListMode {
 export interface ListPlayerItem {
   type: 'player' | 'spectator' | 'storyteller' | 'helper';
   id: string;
-  info: string;
+  preVoteInfo: string;
+  vote: string;
+  postVoteInfo: string;
   joined: boolean;
 }
 
@@ -134,6 +136,9 @@ export interface GameState {
   /** （城镇广场）是否为投票模式 */
   voting: CValue<boolean>;
 
+  /** 是否为闭眼投票模式 */
+  blindVoting: CValue<boolean>;
+
   /** （说书人）卡片是是否为忙 */
   busy: CValue<boolean>;
 
@@ -146,8 +151,14 @@ export interface GameState {
   /** 列表参数 见 StorytellerListCard */
   listArg: CValue<number>;
 
+  /** 投票详情 */
+  voteDescription: CValue<string>;
+
   /** 投票信息 */
-  voteInfo: CValue<string>;
+  voteInfo: CValue<{
+    count: string;
+    status: string;
+  }>;
 
   /** 投票倒计时 */
   votingStart: CValue<number>;
@@ -195,9 +206,14 @@ export class Session {
     phase: $state<Phase>(Phase.INITIALIZING),
     listMode: $state(ListMode.STATUS),
     voting: $state(false),
+    blindVoting: $state(false),
     list: $state([]),
     listSelected: $array([]),
-    voteInfo: $state(''),
+    voteDescription: $state(''),
+    voteInfo: $state({
+      count: '',
+      status: '',
+    }),
     votingStart: $state(0),
     votingEnd: $state(0),
     townsquareCount: $state(0),
@@ -590,7 +606,7 @@ export class Session {
     };
 
     const players: typeof this.state.list.value = [...this.players].map((p, index) => {
-      const infoColumns = [
+      const preVoteColumns = [
         mute(p.id),
         slot(
           p.id,
@@ -598,16 +614,17 @@ export class Session {
           this.phase(Phase.COTTAGE) ? 'tips' : 'success',
         ),
         status(p),
-        vote(p.vote),
-        `(met)${p.id}(met)`,
-        channelInfo(p.id),
       ];
+
+      const postVoteColumns = [`(met)${p.id}(met)`, channelInfo(p.id)];
 
       return {
         type: 'player',
         id: p.id,
         joined: joinedPlayers.has(p.id),
-        info: infoColumns.filter((item) => item !== null).join(SEP),
+        preVoteInfo: preVoteColumns.filter((item) => item !== null).join(SEP) + SEP,
+        vote: vote(p.vote) || '',
+        postVoteInfo: SEP + postVoteColumns.filter((item) => item !== null).join(SEP),
       };
     });
 
@@ -621,7 +638,9 @@ export class Session {
       type: 'storyteller',
       id: this.storytellerId,
       joined: joinedPlayers.has(this.storytellerId),
-      info: storytellerInfoColumns.filter((item) => item !== null).join(SEP),
+      preVoteInfo: storytellerInfoColumns.filter((item) => item !== null).join(SEP),
+      vote: '',
+      postVoteInfo: '',
     });
 
     // 添加旁观玩家（有会话权限但不在游戏中的用户）
@@ -649,7 +668,9 @@ export class Session {
         type: this.helperSet.has(userId) ? 'helper' : 'spectator',
         id: userId,
         joined: true,
-        info: spectatorInfoColumns.filter((item) => item !== null).join(SEP),
+        preVoteInfo: spectatorInfoColumns.filter((item) => item !== null).join(SEP),
+        vote: '',
+        postVoteInfo: '',
       });
     });
 
@@ -854,6 +875,7 @@ export class Session {
     this.listSelection = new Set();
     this.state.listArg.set(0);
     this.state.listMode.set(ListMode.STATUS);
+    this.state.blindVoting.set(false);
 
     // 从上麦状态退出时需要更新禁言状态
     if (previousListMode === ListMode.SPOTLIGHT) {
@@ -1162,7 +1184,8 @@ export class Session {
     // 切换到投票模式
     this.listSelection = new Set();
     this.state.listMode.set(ListMode.VOTING);
-    this.state.listArg.set(1);
+    this.state.blindVoting.set(false);
+    this.state.listArg.set(0);
 
     this.vote.enterNomination(nominator, userId);
     this.updatePlayerList();
@@ -1279,6 +1302,15 @@ export class Session {
     // 必须已经在投票状态才能开始
     if (this.state.listMode.value !== ListMode.VOTING) return;
     this.vote.start();
+  }
+
+  /**
+   * 切换闭眼投票
+   */
+  protected storytellerToggleBlindVoting() {
+    // 必须已经在投票状态才能切换
+    if (this.state.listMode.value !== ListMode.VOTING) return;
+    this.vote.toggleBlindVoting();
   }
 
   /**

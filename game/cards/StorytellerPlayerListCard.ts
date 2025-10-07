@@ -22,8 +22,14 @@ interface Props {
   /** 列表参数 */
   listArg: CValue<number>;
 
+  /** 投票详情 */
+  voteDescription: CValue<string>;
+
   /** 投票信息 */
-  voteInfo: CValue<string>;
+  voteInfo: CValue<{
+    count: string;
+    status: string;
+  }>;
 
   /** 投票倒计时 */
   votingStart: CValue<number>;
@@ -221,11 +227,16 @@ class CardRenderer extends Card<Props> {
         break;
 
       case ListMode.VOTING:
-        status = state.voteInfo.value || '投票进行中';
+        status =
+          state.voteDescription + '\n' + state.voteInfo.value.count + state.voteInfo.value.status;
         let started = state.votingStart.value > 0;
         groups.push([
           { text: '退出', theme: 'danger', value: '[st]ListStatus' },
-          { text: '　', theme: 'secondary' },
+          started
+            ? { text: '　', theme: 'secondary' }
+            : state.listArg.value === 1
+              ? { text: '正常投票', theme: 'info', value: '[st]ToggleBlindVoting' }
+              : { text: '闭眼投票', theme: 'warning', value: '[st]ToggleBlindVoting' },
           started
             ? { text: '完成统计', theme: 'warning', value: '[st]EndVoting' }
             : { text: '　', theme: 'secondary' },
@@ -265,7 +276,7 @@ class CardRenderer extends Card<Props> {
     // 构建玩家列表
     const selectedSet = new Set(state.listSelected);
     const players = state.list.value.map((item: ListPlayerItem) => {
-      let info = item.info;
+      let info = item.preVoteInfo + item.vote + item.postVoteInfo;
       let action: { text: string; theme: ButtonTheme } | 'none' | undefined;
 
       switch (state.listMode.value) {

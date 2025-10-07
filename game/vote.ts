@@ -33,7 +33,16 @@ export class VoteManager {
 
   constructor(
     private readonly players: PlayerState[],
-    private readonly state: Pick<GameState, 'voting' | 'votingEnd' | 'votingStart' | 'voteInfo'>,
+    private readonly state: Pick<
+      GameState,
+      | 'voting'
+      | 'votingEnd'
+      | 'votingStart'
+      | 'voteInfo'
+      | 'blindVoting'
+      | 'voteDescription'
+      | 'listArg'
+    >,
     private readonly updatePlayerList: () => void,
   ) {}
 
@@ -41,16 +50,15 @@ export class VoteManager {
     if (this._startIndex === -1) {
       // 普通投票没有那么多数据
       const current = this.state.voteInfo.value;
-      const lines = current.split('\n');
-      lines[1] = `投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, 0)}`;
-      this.state.voteInfo.set(lines.join('\n'));
+      current.count = `${this.state.blindVoting.value ? '闭眼' : ''}投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, 0)}`;
+      current.status = '';
+      this.state.voteInfo.set(current);
       return;
     }
 
     const started = this.state.votingStart.value > 0;
 
     const current = this.state.voteInfo.value;
-    const lines = current.split('\n');
     const countingPlayer = this.players.find(
       (p) => p.vote.status === PlayerVoteStatus.COUNTING,
     )?.id;
@@ -63,8 +71,9 @@ export class VoteManager {
       requiredVotes = 0;
     }
 
-    lines[1] = `投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, this._voteOffset)} / ${requiredVotes}${countingPlayer != null ? `　　(font)${started ? '正在计入：' : '起始玩家：'}(font)[${started ? 'purple' : 'body'}](met)${countingPlayer}(met)` : ''}`;
-    this.state.voteInfo.set(lines.join('\n'));
+    current.count = `${this.state.blindVoting.value ? '闭眼' : ''}投票：${this.players.reduce((acc, cur) => acc + cur.vote.count, this._voteOffset)} / ${requiredVotes}`;
+    current.status = `${countingPlayer != null ? `　　(font)${started ? '正在计入：' : '起始玩家：'}(font)[${started ? 'purple' : 'body'}](met)${countingPlayer}(met)` : ''}`;
+    this.state.voteInfo.set(current);
   };
 
   /**
@@ -72,6 +81,15 @@ export class VoteManager {
    */
   isNomination() {
     return this.state.voting.value && this._startIndex !== -1;
+  }
+
+  /**
+   * 切换闭眼投票
+   */
+  toggleBlindVoting() {
+    this.state.blindVoting.set(!this.state.blindVoting.value);
+    this.state.listArg.set(this.state.blindVoting.value ? 1 : 0);
+    this.updateVotingLine();
   }
 
   /** 进入提名投票 */
@@ -93,9 +111,13 @@ export class VoteManager {
     const fromSlot = CIRCLED_NUMBERS[this.players.findIndex((p) => p.id === this._from) + 1] || '⓪';
     const toSlot = CIRCLED_NUMBERS[this.players.findIndex((p) => p.id === this._to) + 1] || '⓪';
 
-    this.state.voteInfo.set(
+    this.state.voteDescription.set(
       `${fromSlot} (met)${this.from}(met) 发起提名，投票(font)处决(font)[danger] ${toSlot} (met)${this.to}(met)`,
     );
+    this.state.voteInfo.set({
+      count: '',
+      status: '',
+    });
     // 开启投票状态
     this.state.voting.set(true);
     // 禁用倒计时
@@ -119,7 +141,11 @@ export class VoteManager {
 
     this.updateVotingLine();
 
-    this.state.voteInfo.set(`(font)说书人(font)[warning]发起了投票`);
+    this.state.voteDescription.set(`(font)说书人(font)[warning]发起了投票`);
+    this.state.voteInfo.set({
+      count: '',
+      status: '',
+    });
     // 开启投票状态
     this.state.voting.set(true);
     // 禁用倒计时

@@ -128,6 +128,7 @@ export class Renderer {
           phase: this.state.phase,
           list: this.state.list,
           listSelected: this.state.listSelected,
+          voteDescription: this.state.voteDescription,
           voteInfo: this.state.voteInfo,
           votingStart: this.state.votingStart,
           votingEnd: this.state.votingEnd,
@@ -172,7 +173,8 @@ export class Renderer {
         TownsquarePlayerListCard({
           voting: this.state.voting,
           list: this.state.list,
-          listArg: this.state.listArg,
+          blindVoting: this.state.blindVoting,
+          voteDescription: this.state.voteDescription,
           voteInfo: this.state.voteInfo,
           votingStart: this.state.votingStart,
           votingEnd: this.state.votingEnd,

@@ -13,11 +13,17 @@ interface Props {
   /** 玩家列表 */
   list: CValue<ListPlayerItem[]>;
 
-  /** 列表参数 */
-  listArg: CValue<number | number[]>;
+  /** 是否为闭眼投票模式 */
+  blindVoting: CValue<boolean>;
+
+  /** 投票详情 */
+  voteDescription: CValue<string>;
 
   /** 投票信息 */
-  voteInfo: CValue<string>;
+  voteInfo: CValue<{
+    count: string;
+    status: string;
+  }>;
 
   /** 投票倒计时 */
   votingStart: CValue<number>;
@@ -39,7 +45,11 @@ class CardRenderer extends Card<Props> {
 
     // 根据投票模式设置状态和按钮
     if (state.voting.value) {
-      status = state.voteInfo.value || '投票进行中';
+      status =
+        state.voteDescription +
+        '\n' +
+        (state.blindVoting.value ? '闭眼投票中...' : state.voteInfo.value.count) +
+        state.voteInfo.value.status;
       if (state.votingStart.value > 0 && state.votingEnd.value > 0) {
         countdown = {
           start: state.votingStart.value,
@@ -47,28 +57,26 @@ class CardRenderer extends Card<Props> {
         };
       }
 
-      // 根据 listArg 决定投票按钮
-      if (state.listArg.value === 1) {
-        groups.push([
-          { text: '放下手', theme: 'secondary', value: '[pl]VoteNone' },
-          { text: '举手', theme: 'primary', value: '[pl]VoteOne' },
-          { text: '举双手', theme: 'info', value: '[pl]VoteTwo' },
-        ]);
-      } else {
-        groups.push([
-          { text: '放下手', theme: 'secondary', value: '[pl]VoteNone' },
-          { text: '举手', theme: 'primary', value: '[pl]VoteOne' },
-        ]);
-      }
+      groups.push([
+        { text: '放下手', theme: 'secondary', value: '[pl]VoteNone' },
+        { text: '举手', theme: 'primary', value: '[pl]VoteOne' },
+        { text: '举双手', theme: 'info', value: '[pl]VoteTwo' },
+      ]);
+
       theme = 'primary';
     } else {
       status = '当前没有进行投票';
     }
 
+    const transformVote = (str: string) =>
+      state.blindVoting.value
+        ? str.replace(/✅/, '⬛').replace(/2️⃣/, '⬛').replace(/❌/, '❓')
+        : str;
+
     // 构建玩家列表，不包含任何操作按钮
     const players = state.list.value.map((item) => {
       return {
-        info: item.info,
+        info: item.preVoteInfo + transformVote(item.vote) + item.postVoteInfo,
         action: 'none' as const,
         id: item.id,
       };
