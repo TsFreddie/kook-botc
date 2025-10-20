@@ -296,18 +296,54 @@ export class GatewayManager {
   }
 
   /**
-   * Create WebSocket connection with retry logic
+   * Create WebSocket connection with retry logic as per documentation
    */
   async createConnection(
     gatewayUrl: string,
     resumeParams?: { sessionId: string; sn: number },
   ): Promise<WebSocket> {
-    const wsUrl = this.buildWebSocketUrl(gatewayUrl, resumeParams);
+    const maxRetries = 2; // Max 2 retries as per documentation
+    const retryIntervals = [2000, 4000]; // 2s, 4s intervals as per documentation
 
-    if (this.debug) {
-      console.log('[Gateway] Connecting to:', wsUrl.replace(this.token, '***'));
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const wsUrl = this.buildWebSocketUrl(gatewayUrl, resumeParams);
+
+        if (this.debug) {
+          console.log(`[Gateway] Connection attempt ${attempt + 1}/${maxRetries + 1} to:`, wsUrl.replace(this.token, '***'));
+        }
+
+        const ws = await this.attemptConnection(wsUrl);
+
+        if (this.debug) {
+          console.log('[Gateway] WebSocket connection successful');
+        }
+
+        return ws;
+      } catch (error) {
+        if (this.debug) {
+          console.error(`[Gateway] Connection attempt ${attempt + 1} failed:`, error);
+        }
+
+        if (attempt < maxRetries) {
+          const delay = retryIntervals[attempt];
+          if (this.debug) {
+            console.log(`[Gateway] Retrying in ${delay}ms`);
+          }
+          await new Promise(resolve => setTimeout(resolve, delay));
+        } else {
+          throw error;
+        }
+      }
     }
 
+    throw new Error('All connection attempts failed');
+  }
+
+  /**
+   * Attempt a single WebSocket connection
+   */
+  private attemptConnection(wsUrl: string): Promise<WebSocket> {
     return new Promise((resolve, reject) => {
       const ws = new WebSocket(wsUrl);
 
@@ -318,30 +354,17 @@ export class GatewayManager {
 
       ws.onopen = () => {
         clearTimeout(timeout);
-        if (this.debug) {
-          console.log('[Gateway] WebSocket connection opened');
-        }
         resolve(ws);
       };
 
       ws.onerror = (error) => {
         clearTimeout(timeout);
-        if (this.debug) {
-          console.error('[Gateway] WebSocket connection error:', error);
-        }
         reject(new Error('WebSocket connection failed'));
       };
 
       ws.onclose = (event) => {
         clearTimeout(timeout);
-        if (this.debug) {
-          console.log('[Gateway] WebSocket connection closed:', event.code, event.reason);
-        }
-        if (!event.wasClean) {
-          reject(
-            new Error(`WebSocket connection closed unexpectedly: ${event.code} ${event.reason}`),
-          );
-        }
+        reject(new Error(`WebSocket connection closed: ${event.code} ${event.reason}`));
       };
     });
   }
@@ -499,6 +522,13 @@ export class HeartbeatManager {
   private isWaitingForPong: boolean = false;
   private onTimeout?: () => void;
   private onSendPing?: (sn: number) => void;
+  private onConnectionLost?: () => void;
+
+  // Ping test state (not retry - these are connection tests as per documentation step 4)
+  private pingTestCount: number = 0;
+  private maxPingTests: number = 2;
+  private pingTestIntervals: number[] = [2000, 4000]; // 2s, 4s as per documentation
+  private onPingTestsFailed?: () => void;
 
   constructor(interval: number = 30000, timeout: number = 6000, debug: boolean = false) {
     this.interval = interval;
@@ -515,6 +545,14 @@ export class HeartbeatManager {
 
   setSendPingHandler(handler: (sn: number) => void): void {
     this.onSendPing = handler;
+  }
+
+  setConnectionLostHandler(handler: () => void): void {
+    this.onConnectionLost = handler;
+  }
+
+  setPingTestsFailedHandler(handler: () => void): void {
+    this.onPingTestsFailed = handler;
   }
 
   /**
@@ -569,15 +607,50 @@ export class HeartbeatManager {
     // Start timeout timer
     this.timeoutTimer = setTimeout(() => {
       if (this.isWaitingForPong) {
-        if (this.debug) {
-          console.log('[Heartbeat] PONG timeout - connection lost');
-        }
-
-        if (this.onTimeout) {
-          this.onTimeout();
-        }
+        this.handlePingTimeout(sn);
       }
     }, this.timeout);
+  }
+
+  /**
+   * Handle ping timeout - implement test logic as per documentation step 4
+   * Send 2 pings with 2s, 4s intervals to test if connection is alive
+   * If both fail, trigger ping tests failed handler (which will start resume attempts)
+   */
+  private handlePingTimeout(sn: number): void {
+    if (this.debug) {
+      console.log(`[Heartbeat] PONG timeout - test attempt ${this.pingTestCount + 1}/${this.maxPingTests}`);
+    }
+
+    if (this.pingTestCount < this.maxPingTests) {
+      // Send another ping test with documented intervals (2s, 4s)
+      const testDelay = this.pingTestIntervals[this.pingTestCount];
+      this.pingTestCount++;
+
+      if (this.debug) {
+        console.log(`[Heartbeat] Retrying ping test in ${testDelay}ms`);
+      }
+
+      setTimeout(() => {
+        this.sendPing(sn);
+      }, testDelay);
+    } else {
+      // All ping tests failed - connection is lost, move to resume attempts
+      if (this.debug) {
+        console.log('[Heartbeat] All ping tests failed - connection lost, starting resume attempts');
+      }
+
+      this.pingTestCount = 0; // Reset for next time
+
+      if (this.onPingTestsFailed) {
+        this.onPingTestsFailed();
+      } else if (this.onConnectionLost) {
+        this.onConnectionLost();
+      } else if (this.onTimeout) {
+        // Fallback to old behavior if new handler not set
+        this.onTimeout();
+      }
+    }
   }
 
   /**
@@ -589,6 +662,7 @@ export class HeartbeatManager {
     }
 
     this.isWaitingForPong = false;
+    this.pingTestCount = 0; // Reset test count on successful pong
 
     // Clear timeout timer
     if (this.timeoutTimer) {
@@ -773,6 +847,93 @@ export class MessageSequencer {
 }
 
 /**
+ * Resume manager for handling session resumption
+ */
+export class ResumeManager {
+  private debug: boolean;
+  private resumeTimer?: NodeJS.Timeout;
+  private resumeAttempt: number = 0;
+  private maxResumeAttempts: number = 2;
+  private resumeIntervals: number[] = [8000, 16000]; // 8s, 16s as per documentation
+  private onSendResume?: (sn: number) => void;
+  private onResumeFailed?: () => void;
+
+  constructor(debug: boolean = false) {
+    this.debug = debug;
+  }
+
+  setSendResumeHandler(handler: (sn: number) => void): void {
+    this.onSendResume = handler;
+  }
+
+  setResumeFailedHandler(handler: () => void): void {
+    this.onResumeFailed = handler;
+  }
+
+  /**
+   * Start resume attempts
+   */
+  startResume(sn: number): void {
+    this.resumeAttempt = 0;
+    this.attemptResume(sn);
+  }
+
+  private attemptResume(sn: number): void {
+    if (this.resumeAttempt >= this.maxResumeAttempts) {
+      if (this.debug) {
+        console.log('[Resume] All resume attempts failed');
+      }
+
+      if (this.onResumeFailed) {
+        this.onResumeFailed();
+      }
+      return;
+    }
+
+    const delay = this.resumeAttempt === 0 ? 0 : (this.resumeIntervals[this.resumeAttempt - 1] || 16000);
+
+    if (this.debug) {
+      console.log(`[Resume] Attempt ${this.resumeAttempt + 1}/${this.maxResumeAttempts}${delay > 0 ? `, waiting ${delay}ms` : ''}`);
+    }
+
+    this.resumeTimer = setTimeout(() => {
+      if (this.onSendResume) {
+        this.onSendResume(sn);
+      }
+      this.resumeAttempt++;
+    }, delay);
+  }
+
+  /**
+   * Handle successful resume
+   */
+  handleResumeSuccess(): void {
+    if (this.debug) {
+      console.log('[Resume] Resume successful');
+    }
+    this.stop();
+  }
+
+  /**
+   * Handle resume failure and try next attempt
+   */
+  handleResumeFailure(sn: number): void {
+    if (this.debug) {
+      console.log(`[Resume] Resume attempt ${this.resumeAttempt} failed`);
+    }
+    this.attemptResume(sn);
+  }
+
+  stop(): void {
+    if (this.resumeTimer) {
+      clearTimeout(this.resumeTimer);
+      this.resumeTimer = undefined;
+    }
+    this.resumeAttempt = 0;
+  }
+}
+
+/**
  * Reconnection manager with exponential backoff
  */
 export class ReconnectionManager {
@@ -782,9 +943,9 @@ export class ReconnectionManager {
   private onReconnect?: () => Promise<void>;
 
   constructor(
-    maxAttempts: number = -1, // -1 for unlimited
+    maxAttempts: number = -1, // -1 for unlimited as per documentation
     baseDelay: number = 2000,
-    maxDelay: number = 60000,
+    maxDelay: number = 60000, // Max 60s as per documentation
     debug: boolean = false,
   ) {
     this.config = {
@@ -970,10 +1131,12 @@ export interface KookEventMap {
 
   // Heartbeat events
   heartbeatTimeout: () => void;
+  connectionLost: () => void;
 
   // Reconnection events
   reconnect: (data: any) => void;
   resumed: (data: any) => void;
+  resumeFailed: () => void;
 
   // Legacy message events (for backward compatibility)
   message: (event: any) => void;
@@ -1060,12 +1223,16 @@ export class KookClient extends KookEventEmitter {
   private heartbeat: HeartbeatManager;
   private sequencer: MessageSequencer;
   private reconnection: ReconnectionManager;
+  private resume: ResumeManager;
   private session: SessionManager;
 
   private eventManager: TypedEventManager;
 
   // HTTP API client
   public api: KookApiClient;
+
+  // HELLO timeout timer
+  private helloTimeoutTimer?: NodeJS.Timeout;
 
   constructor(config: KookClientConfig) {
     super(config.debug);
@@ -1098,6 +1265,7 @@ export class KookClient extends KookEventEmitter {
       this.config.reconnectBackoffMax,
       this.config.debug,
     );
+    this.resume = new ResumeManager(this.config.debug);
     this.session = new SessionManager(this.config.debug);
     this.eventManager = new TypedEventManager(this.config.debug);
 
@@ -1119,8 +1287,13 @@ export class KookClient extends KookEventEmitter {
     this.signalHandler.setEventHandler((signal) => this.handleEvent(signal));
 
     // Heartbeat handlers
-    this.heartbeat.setTimeoutHandler(() => this.handleHeartbeatTimeout());
+    this.heartbeat.setPingTestsFailedHandler(() => this.handlePingTestsFailed());
+    this.heartbeat.setConnectionLostHandler(() => this.handleConnectionLost());
     this.heartbeat.setSendPingHandler((sn) => this.sendPing(sn));
+
+    // Resume handlers
+    this.resume.setSendResumeHandler((sn) => this.sendResume(sn));
+    this.resume.setResumeFailedHandler(() => this.handleResumeFailed());
 
     // Message sequencer handler
     this.sequencer.setMessageHandler((signal) => this.processEvent(signal));
@@ -1156,6 +1329,9 @@ export class KookClient extends KookEventEmitter {
       // Create WebSocket connection
       this.ws = await this.gateway.createConnection(gatewayUrl, resumeParams || undefined);
       this.setupWebSocketHandlers();
+
+      // Start HELLO timeout (6 seconds as per documentation)
+      this.startHelloTimeout();
 
       this.setState(ConnectionState.CONNECTED);
       this.emit('connected');
@@ -1208,9 +1384,40 @@ export class KookClient extends KookEventEmitter {
   }
 
   /**
+   * Start HELLO timeout (6 seconds as per documentation)
+   */
+  private startHelloTimeout(): void {
+    this.helloTimeoutTimer = setTimeout(() => {
+      if (this.config.debug) {
+        console.log('[Client] HELLO timeout - no HELLO received within 6 seconds');
+      }
+      const error = new Error('HELLO timeout - connection failed');
+      this.emit('error', error);
+      this.disconnect();
+
+      if (this.config.autoReconnect) {
+        this.reconnection.startReconnection();
+      }
+    }, 6000); // 6 seconds as per documentation
+  }
+
+  /**
+   * Clear HELLO timeout
+   */
+  private clearHelloTimeout(): void {
+    if (this.helloTimeoutTimer) {
+      clearTimeout(this.helloTimeoutTimer);
+      this.helloTimeoutTimer = undefined;
+    }
+  }
+
+  /**
    * Handle HELLO signal
    */
   private handleHello(signal: HelloSignal): void {
+    // Clear HELLO timeout on receiving HELLO
+    this.clearHelloTimeout();
+
     if (signal.d.code === HelloErrorCode.SUCCESS) {
       this.setState(ConnectionState.AUTHENTICATED);
       this.session.setSession(signal.d.session_id!, '', 0);
@@ -1296,6 +1503,15 @@ export class KookClient extends KookEventEmitter {
     if (this.config.debug) {
       console.log('[Client] Resume successful:', signal.d.session_id);
     }
+
+    // Notify resume manager of success
+    this.resume.handleResumeSuccess();
+
+    // Update session with new session ID if provided
+    if (signal.d.session_id) {
+      this.session.setSession(signal.d.session_id, '', this.sequencer.getLastProcessedSN());
+    }
+
     this.emit('resumed', signal.d);
   }
 
@@ -1322,14 +1538,49 @@ export class KookClient extends KookEventEmitter {
   }
 
   /**
-   * Handle heartbeat timeout
+   * Handle ping tests failed (as per documentation step 4)
+   * After 2 ping tests fail, move to resume attempts
    */
-  private handleHeartbeatTimeout(): void {
+  private handlePingTestsFailed(): void {
     if (this.config.debug) {
-      console.log('[Client] Heartbeat timeout');
+      console.log('[Client] Ping tests failed - starting resume attempts (step 5)');
     }
 
-    this.emit('heartbeatTimeout');
+    this.emit('connectionLost');
+
+    if (this.config.autoReconnect) {
+      // Try resume attempts (8s, 16s intervals) as per documentation step 5
+      const currentSN = this.sequencer.getLastProcessedSN();
+      this.resume.startResume(currentSN);
+    }
+  }
+
+  /**
+   * Handle connection lost (fallback for other connection loss scenarios)
+   */
+  private handleConnectionLost(): void {
+    if (this.config.debug) {
+      console.log('[Client] Connection lost - starting resume attempts');
+    }
+
+    this.emit('connectionLost');
+
+    if (this.config.autoReconnect) {
+      // Try resume attempts (8s, 16s intervals) as per documentation step 5
+      const currentSN = this.sequencer.getLastProcessedSN();
+      this.resume.startResume(currentSN);
+    }
+  }
+
+  /**
+   * Handle resume failed - fall back to full reconnection
+   */
+  private handleResumeFailed(): void {
+    if (this.config.debug) {
+      console.log('[Client] Resume failed - falling back to full reconnection');
+    }
+
+    this.emit('resumeFailed');
 
     if (this.config.autoReconnect) {
       this.disconnect();
@@ -1344,6 +1595,23 @@ export class KookClient extends KookEventEmitter {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       const pingMessage = this.signalHandler.createPingSignal(sn);
       this.ws.send(pingMessage);
+    }
+  }
+
+  /**
+   * Send RESUME signal
+   */
+  private sendResume(sn: number): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      const resumeMessage = this.signalHandler.createResumeSignal(sn);
+      this.ws.send(resumeMessage);
+
+      if (this.config.debug) {
+        console.log(`[Client] Sent RESUME signal with SN: ${sn}`);
+      }
+    } else {
+      // Connection is broken, can't send resume signal
+      this.resume.handleResumeFailure(sn);
     }
   }
 
@@ -1376,6 +1644,7 @@ export class KookClient extends KookEventEmitter {
    * Disconnect from WebSocket
    */
   disconnect(): void {
+    this.clearHelloTimeout();
     this.heartbeat.stop();
     this.reconnection.stop();
 
