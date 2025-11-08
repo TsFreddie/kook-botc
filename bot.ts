@@ -206,7 +206,7 @@ const initialize = async () => {
   let roomCategory;
 
   for (const channel of channels.items) {
-    if (channel.is_category && channel.name === '游戏房间') {
+    if (channel.is_category && channel.name === '染・钟楼') {
       roomCategory = channel;
       break;
     }
@@ -215,7 +215,7 @@ const initialize = async () => {
   if (!roomCategory) {
     const category = await bot.api.channelCreate({
       guild_id,
-      name: '游戏房间',
+      name: '染・钟楼',
       is_category: 1,
     });
     roomCategory = category;
