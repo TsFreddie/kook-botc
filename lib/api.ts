@@ -1314,7 +1314,11 @@ export class KookApiClient {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          let body;
+          try {
+            body = await response.text();
+          } catch (error) {}
+          throw new Error(`HTTP ${response.status}: ${response.statusText}\n${body}`);
         }
 
         const data = (await response.json()) as KookApiResponse<T>;
@@ -1411,7 +1415,11 @@ export class KookApiClient {
         clearTimeout(timeoutId);
 
         if (!response.ok) {
-          throw new Error(`HTTP ${response.status}: ${response.statusText}`);
+          let body;
+          try {
+            body = await response.text();
+          } catch (error) {}
+          throw new Error(`HTTP ${response.status}: ${response.statusText}\n${body}`);
         }
 
         const data = (await response.json()) as KookApiResponse<T>;
